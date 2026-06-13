@@ -32,6 +32,7 @@ class DatabaseManager:
                 is_martyr_family INTEGER DEFAULT 0,
                 notes TEXT,
                 photo_path TEXT,
+                marital_status TEXT DEFAULT 'celibataire' CHECK(marital_status IN ('marie', 'celibataire')),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -68,49 +69,33 @@ class DatabaseManager:
 
         # Configuration des pensions (dans la table config existante)
         pension_defaults = [
-            ('pension_conjoint', '60'),
-            ('pension_enfant', '30'),
-            ('pension_parent', '40'),
-            ('pension_orphelin', '50')
+            ('pension_conjoint', '40'),
+            ('pension_enfant', '40'),
+            ('pension_parent', '20'),
+            ('pension_orphelin', '40')
         ]
         cursor.executemany("""
             INSERT OR IGNORE INTO config (key, value) 
             VALUES (?, ?)
         """, pension_defaults)
 
-        # Table des pensions
+        # Table des paiements de pensions mensuels
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS pensions (
+            CREATE TABLE IF NOT EXISTS pension_payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 martyr_id INTEGER NOT NULL,
-                membre_id INTEGER NOT NULL,
-                type_pension TEXT NOT NULL CHECK(type_pension IN (
-                    'conjoint', 'enfant', 'parent', 'orphelin'
-                )),
-                montant_mensuel REAL NOT NULL,
-                date_debut TEXT,
-                statut TEXT DEFAULT 'actif' CHECK(statut IN ('actif', 'suspendu')),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                beneficiary_id INTEGER NOT NULL,
+                beneficiary_type TEXT NOT NULL,
+                amount REAL NOT NULL,
+                payment_month INTEGER NOT NULL,
+                payment_year INTEGER NOT NULL,
+                payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (martyr_id) REFERENCES persons(id),
-                FOREIGN KEY (membre_id) REFERENCES persons(id)
+                FOREIGN KEY (beneficiary_id) REFERENCES persons(id),
+                UNIQUE(martyr_id, beneficiary_id, payment_month, payment_year)
             )
         """)
 
-        # Table des paiements (historique)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS paiements (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                pension_id INTEGER NOT NULL,
-                mois_annee TEXT NOT NULL,
-                montant_paye REAL NOT NULL,
-                date_paiement TEXT,
-                mode_paiement TEXT CHECK(mode_paiement IN ('virement', 'especes', 'cheque')),
-                statut TEXT DEFAULT 'paye' CHECK(statut IN ('paye', 'en_attente', 'retard')),
-                notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (pension_id) REFERENCES pensions(id)
-            )
-        """)
         
         conn.commit()
         conn.close()
@@ -120,15 +105,15 @@ class DatabaseManager:
     
     def add_person(self, first_name, last_name, cin=None, birth_date=None, 
                    death_date=None, gender=None, is_martyr=1, is_martyr_family=0,
-                   notes=None, photo_path=None):
+                   notes=None, photo_path=None, marital_status='celibataire'):
         conn = self.connect()
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO persons (cin, first_name, last_name, birth_date, death_date, 
-                               gender, is_martyr, is_martyr_family, notes, photo_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               gender, is_martyr, is_martyr_family, notes, photo_path, marital_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (cin, first_name, last_name, birth_date, death_date, 
-              gender, is_martyr, is_martyr_family, notes, photo_path))
+              gender, is_martyr, is_martyr_family, notes, photo_path, marital_status))
         person_id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -152,7 +137,7 @@ class DatabaseManager:
     
     def update_person(self, person_id, **kwargs):
         allowed_fields = ['cin','first_name', 'last_name', 'birth_date', 
-                         'death_date', 'gender', 'notes', 'photo_path', 'is_martyr', 'is_martyr_family']
+                         'death_date', 'gender', 'notes', 'photo_path', 'is_martyr', 'is_martyr_family', 'marital_status']
         updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
         
         if not updates:
@@ -171,14 +156,26 @@ class DatabaseManager:
     def delete_person(self, person_id):
         conn = self.connect()
         cursor = conn.cursor()
-        # Supprimer d'abord les relations
+        
+        # Supprimer la photo
+        cursor.execute("SELECT photo_path FROM persons WHERE id = ?", (person_id,))
+        row = cursor.fetchone()
+        if row and row['photo_path']:
+            import os
+            try:
+                os.remove(row['photo_path'])
+            except Exception as e:
+                print(f"Erreur suppression photo: {e}")
+        
+        # Supprimer les relations
         cursor.execute("DELETE FROM relationships WHERE person1_id = ? OR person2_id = ?", 
-                      (person_id, person_id))
-        # Puis la personne
+                    (person_id, person_id))
+        
+        # Supprimer la personne
         cursor.execute("DELETE FROM persons WHERE id = ?", (person_id,))
+        
         conn.commit()
         conn.close()
-    
     # ========== RELATIONSHIPS ==========
     
     def add_relationship(self, person1_id, person2_id, relation_type):
@@ -287,74 +284,6 @@ class DatabaseManager:
         conn.close()
         return stats
     
-    # ========== PENSIONS ==========
-    
-    def add_pension(self, martyr_id, membre_id, type_pension, date_debut=None):
-        montant = self.calculer_pension(type_pension)
-        conn = self.connect()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO pensions (martyr_id, membre_id, type_pension, 
-                                montant_mensuel, date_debut)
-            VALUES (?, ?, ?, ?, ?)
-        """, (martyr_id, membre_id, type_pension, montant, date_debut))
-        pension_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        return pension_id
-    
-    def get_pensions_by_martyr(self, martyr_id):
-        conn = self.connect()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT p.*, 
-                   m.first_name, m.last_name,
-                   m.gender, m.birth_date
-            FROM pensions p
-            JOIN persons m ON p.membre_id = m.id
-            WHERE p.martyr_id = ?
-            ORDER BY p.type_pension, m.last_name
-        """, (martyr_id,))
-        pensions = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return pensions
-    
-    def get_total_pensions_martyr(self, martyr_id):
-        conn = self.connect()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT SUM(montant_mensuel) FROM pensions 
-            WHERE martyr_id = ? AND statut = 'actif'
-        """, (martyr_id,))
-        total = cursor.fetchone()[0] or 0
-        conn.close()
-        return total
-    
-    def get_stats_pensions(self):
-        conn = self.connect()
-        cursor = conn.cursor()
-        
-        # Total pensions actives
-        cursor.execute("""
-            SELECT COUNT(*), SUM(montant_mensuel) 
-            FROM pensions WHERE statut = 'actif'
-        """)
-        count, total = cursor.fetchone()
-        
-        # Par type
-        cursor.execute("""
-            SELECT type_pension, COUNT(*), SUM(montant_mensuel)
-            FROM pensions WHERE statut = 'actif'
-            GROUP BY type_pension
-        """)
-        by_type = {row[0]: {'count': row[1], 'total': row[2]} for row in cursor.fetchall()}
-        
-        conn.close()
-        return {
-            'total_pensions': count or 0,
-            'montant_total': total or 0,
-            'par_type': by_type
-        }
 
     # ========== CONFIG ==========
 
@@ -405,122 +334,285 @@ class DatabaseManager:
         smig = self.get_smig()
         pourcentage = self.get_pension_pourcentage(type_pension)
         return smig * (pourcentage / 100)
-    
 
-    # ========== PAIEMENTS ==========
-    
-    def add_paiement(self, pension_id, mois_annee, montant_paye, 
-                     date_paiement=None, mode_paiement='virement', notes=None):
+    # ========== PENSION PAYMENTS ==========
+
+    def get_martyr_family_for_pension(self, martyr_id):
+        """Récupère les membres de famille vivants d'un martyr pour calcul des pensions"""
         conn = self.connect()
         cursor = conn.cursor()
+
+        # Récupérer le martyr
+        cursor.execute("SELECT * FROM persons WHERE id = ? AND is_martyr = 1", (martyr_id,))
+        martyr = cursor.fetchone()
+        if not martyr:
+            conn.close()
+            return None
+
+        martyr = dict(martyr)
+
+        # Récupérer toutes les relations
         cursor.execute("""
-            INSERT INTO paiements (pension_id, mois_annee, montant_paye, 
-                                 date_paiement, mode_paiement, notes)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (pension_id, mois_annee, montant_paye, date_paiement, mode_paiement, notes))
-        paiement_id = cursor.lastrowid
+            SELECT r.*, p.* FROM relationships r
+            JOIN persons p ON (r.person1_id = p.id OR r.person2_id = p.id)
+            WHERE (r.person1_id = ? OR r.person2_id = ?)
+            AND p.id != ?
+            AND (p.death_date IS NULL OR p.death_date = '')
+        """, (martyr_id, martyr_id, martyr_id))
+
+        relations = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+
+        # Organiser par type de relation
+        family = {
+            'martyr': martyr,
+            'parents': [],
+            'spouses': [],
+            'children': [],
+            'siblings': []
+        }
+
+        for rel in relations:
+            if rel['person1_id'] == martyr_id:
+                other_id = rel['person2_id']
+            else:
+                other_id = rel['person1_id']
+
+            # Récupérer la personne complète
+            person = self.get_person(other_id)
+            if person and (not person.get('death_date') or not person['death_date'].strip()):
+                rel_type = rel['relation_type']
+                if rel_type == 'parent':
+                    family['parents'].append(person)
+                elif rel_type == 'spouse':
+                    family['spouses'].append(person)
+                elif rel_type == 'child':
+                    family['children'].append(person)
+                elif rel_type == 'sibling':
+                    family['siblings'].append(person)
+
+        return family
+
+    def calculate_pensions(self, martyr_id):
+        """Calcule les pensions pour un martyr selon les règles"""
+        family = self.get_martyr_family_for_pension(martyr_id)
+        if not family:
+            return []
+
+        martyr = family['martyr']
+        smig = self.get_smig()
+        total_pension = smig * 3
+
+        pensions = []
+
+        marital_status = martyr.get('marital_status', 'celibataire')
+
+        if marital_status == 'celibataire':
+            # Martyr célibataire
+            parents = family['parents']
+            siblings = family['siblings']
+
+            if parents:
+                # Parents vivants → 100% aux parents
+                num_parents = len(parents)
+                if num_parents == 1:
+                    # Un seul parent vivant → 100%
+                    parent = parents[0]
+                    pensions.append({
+                        'beneficiary_id': parent['id'],
+                        'beneficiary_name': f"{parent['first_name']} {parent['last_name']}",
+                        'beneficiary_type': 'parent',
+                        'amount': total_pension,
+                        'percentage': 100
+                    })
+                else:
+                    # Deux parents vivants → 50% chacun
+                    for parent in parents:
+                        pensions.append({
+                            'beneficiary_id': parent['id'],
+                            'beneficiary_name': f"{parent['first_name']} {parent['last_name']}",
+                            'beneficiary_type': 'parent',
+                            'amount': total_pension / 2,
+                            'percentage': 50
+                        })
+            elif siblings:
+                # Parents morts → frères/sœurs se partagent
+                num_siblings = len(siblings)
+                for sibling in siblings:
+                    pensions.append({
+                        'beneficiary_id': sibling['id'],
+                        'beneficiary_name': f"{sibling['first_name']} {sibling['last_name']}",
+                        'beneficiary_type': 'sibling',
+                        'amount': total_pension / num_siblings,
+                        'percentage': round(100 / num_siblings, 2)
+                    })
+
+        else:  # marié
+            # Martyr marié
+            parents = family['parents']
+            spouses = family['spouses']
+            children = family['children']
+
+            # Parents : 20%
+            if parents:
+                parent_share = total_pension * 0.20
+                num_parents = len(parents)
+                for parent in parents:
+                    pensions.append({
+                        'beneficiary_id': parent['id'],
+                        'beneficiary_name': f"{parent['first_name']} {parent['last_name']}",
+                        'beneficiary_type': 'parent',
+                        'amount': parent_share / num_parents,
+                        'percentage': round(20 / num_parents, 2)
+                    })
+
+            # Conjoint(e) : 40%
+            if spouses:
+                spouse_share = total_pension * 0.40
+                num_spouses = len(spouses)
+                for spouse in spouses:
+                    pensions.append({
+                        'beneficiary_id': spouse['id'],
+                        'beneficiary_name': f"{spouse['first_name']} {spouse['last_name']}",
+                        'beneficiary_type': 'spouse',
+                        'amount': spouse_share / num_spouses,
+                        'percentage': round(40 / num_spouses, 2)
+                    })
+
+            # Enfants : 40%
+            if children:
+                children_share = total_pension * 0.40
+                num_children = len(children)
+                for child in children:
+                    pensions.append({
+                        'beneficiary_id': child['id'],
+                        'beneficiary_name': f"{child['first_name']} {child['last_name']}",
+                        'beneficiary_type': 'child',
+                        'amount': children_share / num_children,
+                        'percentage': round(40 / num_children, 2)
+                    })
+
+        return pensions
+
+    def pay_pensions(self, month, year):
+        """Paie les pensions pour tous les martyrs pour un mois donné"""
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        results = {
+            'paid': [],
+            'skipped': [],
+            'errors': []
+        }
+
+        martyrs = self.get_martyrs()
+
+        for martyr in martyrs:
+            martyr_id = martyr['id']
+            pensions = self.calculate_pensions(martyr_id)
+
+            if not pensions:
+                results['skipped'].append({
+                    'martyr_id': martyr_id,
+                    'martyr_name': f"{martyr['first_name']} {martyr['last_name']}",
+                    'reason': 'Aucun bénéficiaire vivant'
+                })
+                continue
+
+            for pension in pensions:
+                beneficiary_id = pension['beneficiary_id']
+
+                # Vérifier si déjà payé ce mois
+                cursor.execute("""
+                    SELECT id FROM pension_payments 
+                    WHERE martyr_id = ? AND beneficiary_id = ? 
+                    AND payment_month = ? AND payment_year = ?
+                """, (martyr_id, beneficiary_id, month, year))
+
+                if cursor.fetchone():
+                    results['skipped'].append({
+                        'martyr_id': martyr_id,
+                        'martyr_name': f"{martyr['first_name']} {martyr['last_name']}",
+                        'beneficiary': pension['beneficiary_name'],
+                        'reason': 'Déjà payé ce mois'
+                    })
+                    continue
+
+                try:
+                    cursor.execute("""
+                        INSERT INTO pension_payments 
+                        (martyr_id, beneficiary_id, beneficiary_type, amount, payment_month, payment_year)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (martyr_id, beneficiary_id, pension['beneficiary_type'], 
+                          pension['amount'], month, year))
+
+                    results['paid'].append({
+                        'martyr_id': martyr_id,
+                        'martyr_name': f"{martyr['first_name']} {martyr['last_name']}",
+                        'beneficiary': pension['beneficiary_name'],
+                        'type': pension['beneficiary_type'],
+                        'amount': pension['amount'],
+                        'percentage': pension['percentage']
+                    })
+                except Exception as e:
+                    results['errors'].append({
+                        'martyr_id': martyr_id,
+                        'error': str(e)
+                    })
+
         conn.commit()
         conn.close()
-        return paiement_id
-    
-    def get_paiements_by_pension(self, pension_id):
+        return results
+
+    def get_pension_history(self, martyr_id=None, month=None, year=None):
+        """Récupère l'historique des paiements de pensions"""
         conn = self.connect()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT * FROM paiements 
-            WHERE pension_id = ? 
-            ORDER BY mois_annee DESC
-        """, (pension_id,))
-        paiements = [dict(row) for row in cursor.fetchall()]
+
+        query = """
+            SELECT pp.*, 
+                   m.first_name as martyr_first, m.last_name as martyr_last,
+                   b.first_name as ben_first, b.last_name as ben_last
+            FROM pension_payments pp
+            JOIN persons m ON pp.martyr_id = m.id
+            JOIN persons b ON pp.beneficiary_id = b.id
+            WHERE 1=1
+        """
+        params = []
+
+        if martyr_id:
+            query += " AND pp.martyr_id = ?"
+            params.append(martyr_id)
+        if month:
+            query += " AND pp.payment_month = ?"
+            params.append(month)
+        if year:
+            query += " AND pp.payment_year = ?"
+            params.append(year)
+
+        query += " ORDER BY pp.payment_year DESC, pp.payment_month DESC, pp.payment_date DESC"
+
+        cursor.execute(query, params)
+        payments = [dict(row) for row in cursor.fetchall()]
         conn.close()
-        return paiements
-    
-    def get_paiements_by_martyr(self, martyr_id):
+        return payments
+
+    def get_total_pensions_paid(self, month=None, year=None):
+        """Calcule le total des pensions payées"""
         conn = self.connect()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT pa.*, p.type_pension, m.first_name, m.last_name
-            FROM paiements pa
-            JOIN pensions p ON pa.pension_id = p.id
-            JOIN persons m ON p.membre_id = m.id
-            WHERE p.martyr_id = ?
-            ORDER BY pa.mois_annee DESC
-        """, (martyr_id,))
-        paiements = [dict(row) for row in cursor.fetchall()]
+
+        query = "SELECT SUM(amount) as total FROM pension_payments WHERE 1=1"
+        params = []
+
+        if month:
+            query += " AND payment_month = ?"
+            params.append(month)
+        if year:
+            query += " AND payment_year = ?"
+            params.append(year)
+
+        cursor.execute(query, params)
+        result = cursor.fetchone()
         conn.close()
-        return paiements
-    
-    def get_alertes(self):
-        """Récupère les alertes : pensions en retard, enfants majeurs, etc."""
-        conn = self.connect()
-        cursor = conn.cursor()
-        alertes = []
-        
-        # 1. Pensions sans paiement depuis 2 mois
-        from datetime import datetime, timedelta
-        deux_mois = (datetime.now() - timedelta(days=60)).strftime("%Y-%m")
-        
-        cursor.execute("""
-            SELECT p.id, p.martyr_id, p.membre_id, p.type_pension,
-                   m.first_name, m.last_name,
-                   ma.first_name as martyr_first, ma.last_name as martyr_last
-            FROM pensions p
-            JOIN persons m ON p.membre_id = m.id
-            JOIN persons ma ON p.martyr_id = ma.id
-            WHERE p.statut = 'actif'
-            AND p.id NOT IN (
-                SELECT pension_id FROM paiements 
-                WHERE mois_annee >= ?
-            )
-        """, (deux_mois,))
-        
-        for row in cursor.fetchall():
-            alertes.append({
-                'type': 'retard_paiement',
-                'message': "Pension non payée depuis 2 mois pour {row['first_name']} {row['last_name']} (famille de {row['martyr_first']} {row['martyr_last']})",
-                'niveau': 'urgent'
-            })
-        
-        # 2. Enfants qui atteignent 18 ans cette année
-        from datetime import datetime
-        annee = datetime.now().year
-        
-        cursor.execute("""
-            SELECT p.id, p.membre_id, m.first_name, m.last_name, m.birth_date,
-                   ma.first_name as martyr_first, ma.last_name as martyr_last
-            FROM pensions p
-            JOIN persons m ON p.membre_id = m.id
-            JOIN persons ma ON p.martyr_id = ma.id
-            WHERE p.type_pension = 'enfant'
-            AND p.statut = 'actif'
-            AND m.birth_date LIKE ?
-        """, (f"%{annee - 18}",))
-        
-        for row in cursor.fetchall():
-            alertes.append({
-                'type': 'majoration',
-                'message': f"{row['first_name']} {row['last_name']} atteint 18 ans cette année (famille de {row['martyr_first']} {row['martyr_last']})",
-                'niveau': 'attention'
-            })
-        
-        # 3. Martyrs sans famille (pas de relations)
-        cursor.execute("""
-            SELECT p.id, p.first_name, p.last_name
-            FROM persons p
-            WHERE p.is_martyr = 1
-            AND p.id NOT IN (
-                SELECT person1_id FROM relationships
-                UNION
-                SELECT person2_id FROM relationships
-            )
-        """)
-        
-        for row in cursor.fetchall():
-            alertes.append({
-                'type': 'sans_famille',
-                'message': f"{row['first_name']} {row['last_name']} n'a aucune famille enregistrée",
-                'niveau': 'info'
-            })
-        
-        conn.close()
-        return alertes
+        return result[0] if result and result[0] else 0

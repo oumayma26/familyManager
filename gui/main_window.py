@@ -1,11 +1,14 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QListWidget, QSplitter,
+    QPushButton, QLabel, QTableWidget, QSplitter,
     QMessageBox, QFrame, QLineEdit, QComboBox,
-    QStackedWidget, QDialog
+    QStackedWidget, QDialog, QTableWidgetItem, QHeaderView,
+    QAbstractItemView
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QBrush, QColor
+
+import os
 
 from database.db_manager import DatabaseManager
 from gui.person_form import PersonForm
@@ -149,43 +152,47 @@ class MainWindow(QMainWindow):
         self.btn_add.clicked.connect(self.show_add_form)
         left_layout.addWidget(self.btn_add)
         
-        # Liste des personnes
-        self.list_persons = QListWidget()
+        # Tableau des personnes (avec colonne suppression)
+        self.list_persons = QTableWidget()
+        self.list_persons.setColumnCount(3)  # Photo, Nom, Supprimer
+        self.list_persons.setHorizontalHeaderLabels(["", "Nom", ""])
+        self.list_persons.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+        self.list_persons.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.list_persons.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
+        self.list_persons.setColumnWidth(0, 50)  # Photo
+        self.list_persons.setColumnWidth(2, 40)  # Bouton supprimer
+        self.list_persons.horizontalHeader().hide()
+        self.list_persons.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.list_persons.setSelectionMode(QAbstractItemView.SingleSelection)
         self.list_persons.setStyleSheet("""
-            QListWidget {
+            QTableWidget {
                 border: 1px solid #ddd;
                 border-radius: 5px;
                 padding: 5px;
+                gridline-color: transparent;
             }
-            QListWidget::item {
-                padding: 10px;
+            QTableWidget::item {
+                padding: 5px;
                 border-bottom: 1px solid #eee;
+                min-height: 45px;
             }
-            QListWidget::item:selected {
+            QTableWidget::item:selected {
                 background-color: #e3f2fd;
                 color: #1976d2;
             }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                padding: 5px;
+                font-weight: bold;
+                border: none;
+            }
         """)
-        self.list_persons.itemClicked.connect(self.on_person_selected)
+        self.list_persons.setIconSize(QSize(35, 35))
+        self.list_persons.cellClicked.connect(self.on_person_selected_table)
         left_layout.addWidget(self.list_persons)
-        
-        # Bouton supprimer
-        self.btn_delete = QPushButton("🗑️ Supprimer")
-        self.btn_delete.setStyleSheet("""
-            QPushButton {
-                background-color: #f44336;
-                color: white;
-                padding: 8px;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #da190b;
-            }
-        """)
-        self.btn_delete.clicked.connect(self.delete_person)
-        self.btn_delete.setEnabled(False)
-        left_layout.addWidget(self.btn_delete)
 
+        # Note: La suppression se fait via l'icône 🗑️ dans chaque ligne du tableau
+        
         # Bouton paramètres
         self.btn_settings = QPushButton("⚙️ Paramètres")
         self.btn_settings.setStyleSheet("""
@@ -283,10 +290,30 @@ class MainWindow(QMainWindow):
         """Charge la liste avec les filtres par defaut (Martyrs)"""
         self.apply_filters()
     
+    def on_person_selected_table(self, row, column):
+        """Gère le clic sur une ligne du tableau"""
+        # Si clic sur colonne suppression (colonne 2)
+        if column == 2:
+            person_id = self.list_persons.item(row, 1).data(Qt.UserRole)
+            self.delete_person(person_id)
+            return
+        
+        # Sinon, sélectionner la personne
+        person_id = self.list_persons.item(row, 1).data(Qt.UserRole)
+        self.current_person_id = person_id
+        
+        self.tree_view.current_person_id = person_id
+        
+        person = self.db.get_person(person_id)
+        if person:
+            self.person_form.load_person(person)
+            if self.btn_tree.isChecked():
+                self.tree_view.load_tree(person_id)
+    
     def on_person_selected(self, item):
+        """Ancienne méthode pour compatibilité"""
         person_id = item.data(Qt.UserRole)
         self.current_person_id = person_id
-        self.btn_delete.setEnabled(True)
         
         self.tree_view.current_person_id = person_id
         
@@ -298,7 +325,6 @@ class MainWindow(QMainWindow):
     
     def show_add_form(self):
         self.current_person_id = None
-        self.btn_delete.setEnabled(False)
         self.person_form.clear_form()
         self.switch_tab("details")
         self.list_persons.clearSelection()
@@ -306,10 +332,12 @@ class MainWindow(QMainWindow):
     def on_person_saved(self, person_id):
         self.load_persons_list()
         self.current_person_id = person_id
-        self.btn_delete.setEnabled(True)
     
-    def delete_person(self):
-        if not self.current_person_id:
+    def delete_person(self, person_id=None):
+        if person_id is None:
+            person_id = self.current_person_id
+        
+        if not person_id:
             return
         
         reply = QMessageBox.question(
@@ -320,10 +348,10 @@ class MainWindow(QMainWindow):
         )
         
         if reply == QMessageBox.Yes:
-            self.db.delete_person(self.current_person_id)
-            self.current_person_id = None
-            self.btn_delete.setEnabled(False)
-            self.person_form.clear_form()
+            self.db.delete_person(person_id)
+            if person_id == self.current_person_id:
+                self.current_person_id = None
+                self.person_form.clear_form()
             self.load_persons_list()
             QMessageBox.information(self, "Succes", "Personne supprimee !")
 
@@ -340,13 +368,47 @@ class MainWindow(QMainWindow):
         """Filtre la liste quand les filtres changent"""
         self.apply_filters()
     
+    def create_default_avatar(self, gender):
+        """Crée une icône avatar par défaut selon le genre"""
+        size = 40
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Cercle de fond
+        if gender == "M":
+            color = QColor("#64b5f6")  # Bleu homme
+        elif gender == "F":
+            color = QColor("#f06292")  # Rose femme
+        else:
+            color = QColor("#bdbdbd")  # Gris inconnu
+        
+        painter.setBrush(QBrush(color))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(2, 2, size-4, size-4)
+        
+        # Initiale
+        painter.setPen(QColor("white"))
+        font = painter.font()
+        font.setPointSize(14)
+        font.setBold(True)
+        painter.setFont(font)
+        
+        initial = "?" if gender not in ["M", "F"] else ("H" if gender == "M" else "F")
+        painter.drawText(pixmap.rect(), Qt.AlignCenter, initial)
+        
+        painter.end()
+        return QIcon(pixmap)
+    
     def apply_filters(self):
         """Applique tous les filtres (recherche + type + genre)"""
         search_text = self.search_input.text().strip().lower()
         
         type_filter = self.filter_type.currentIndex()
         
-        gender_map = {0: None, 1: "M", 2: "F", 3: "O"}
+        gender_map = {0: None, 1: "M", 2: "F"}
         gender_filter = gender_map[self.filter_gender.currentIndex()]
         
         if type_filter == 0:
@@ -365,8 +427,11 @@ class MainWindow(QMainWindow):
         if gender_filter:
             persons = [p for p in persons if p.get('gender') == gender_filter]
         
-        self.list_persons.clear()
-        for person in persons:
+        self.list_persons.setRowCount(0)
+        for row, person in enumerate(persons):
+            self.list_persons.insertRow(row)
+            self.list_persons.setRowHeight(row, 50)
+            
             full_name = f"{person['first_name']} {person['last_name']}"
             
             if person.get('is_martyr'):
@@ -378,10 +443,36 @@ class MainWindow(QMainWindow):
             elif person.get('birth_date'):
                 full_name += f" ({person['birth_date'][:4]})"
             
-            self.list_persons.addItem(full_name)
-            self.list_persons.item(self.list_persons.count() - 1).setData(
-                Qt.UserRole, person['id']
-            )
+            # Colonne 0: Photo
+            photo_item = QTableWidgetItem()
+            photo_path = person.get('photo_path')
+            if photo_path and os.path.exists(photo_path):
+                pixmap = QPixmap(photo_path)
+                if not pixmap.isNull():
+                    icon = QIcon(pixmap.scaled(35, 35, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                    photo_item.setIcon(icon)
+                else:
+                    photo_item.setIcon(self.create_default_avatar(person.get('gender')))
+            else:
+                photo_item.setIcon(self.create_default_avatar(person.get('gender')))
+            photo_item.setTextAlignment(Qt.AlignCenter)
+            self.list_persons.setItem(row, 0, photo_item)
+            
+            # Colonne 1: Nom (avec person_id dans les données)
+            name_item = QTableWidgetItem(full_name)
+            name_item.setData(Qt.UserRole, person['id'])
+            self.list_persons.setItem(row, 1, name_item)
+            
+            # Colonne 2: Bouton supprimer 🗑️
+            delete_item = QTableWidgetItem("✕")
+            delete_item.setTextAlignment(Qt.AlignCenter)
+            delete_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            delete_item.setForeground(QBrush(QColor("#f44336")))  # Rouge
+            font = delete_item.font()
+            font.setPointSize(14)
+            font.setBold(True)
+            delete_item.setFont(font)
+            self.list_persons.setItem(row, 2, delete_item)
     
     def reset_filters(self):
         """Reinitialise tous les filtres"""
