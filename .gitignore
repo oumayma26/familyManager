@@ -88,3 +88,6 @@ $RECYCLE.BIN/
 .env.local
 *.pem
 *.key
+
+nsis_portable/*
+*.exe
