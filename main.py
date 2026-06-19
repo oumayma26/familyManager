@@ -1,9 +1,11 @@
 import sys
+from pathlib import Path
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QFontDatabase
+from PySide6.QtGui import QFont, QFontDatabase, QIcon
+from core.auth_manager import AuthManager
 from gui.main_window import MainWindow
-
+from gui.login_dialog import LoginDialog
 
 def load_fonts():
     """Charge les polices système modernes selon l'OS"""
@@ -66,6 +68,11 @@ def setup_palette(app):
 def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+     # Icône
+    icon_path = Path("assets/icon/islam.ico")
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
     
     # Police moderne
     font_family = load_fonts()
@@ -410,6 +417,34 @@ def main():
             border-color: #94a3b8;
         }
     """ % font_family)
+
+
+
+
+    # Icône
+    icon_path = Path("assets/icon/islam.ico")
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
+    
+    # Police, palette, stylesheet...
+    # ... (ton code existant) ...
+    
+    # ========== AUTHENTIFICATION ==========
+    auth = AuthManager()
+    
+    # Vérifier s'il y a des utilisateurs (premier démarrage)
+    is_first = not auth.has_users()
+    
+    # Tenter auto-login
+    auto_logged = auth.auto_login()
+    
+    if not auto_logged:
+        # Montrer le dialogue de connexion
+        login = LoginDialog(is_first_setup=is_first)
+        
+        if not login.exec():  # L'utilisateur a fermé sans se connecter
+            sys.exit(0)
+            
     
     window = MainWindow()
     window.show()

@@ -129,6 +129,43 @@ class DatabaseManager:
                 UNIQUE(martyr_id, beneficiary_id, payment_month, payment_year)
             )
         """)
+
+        
+        def create_auth_tables(conn):
+            """Crée les tables d'authentification"""
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    email TEXT UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    display_name TEXT,
+                    is_admin INTEGER DEFAULT 0,
+                    is_active INTEGER DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP
+                )
+            """)
+            
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    token TEXT UNIQUE NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)
+            """)
+            
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)
+            """)
+            
+            conn.commit()
         
         conn.commit()
         conn.close()
