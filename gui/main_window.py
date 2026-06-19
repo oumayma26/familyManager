@@ -14,6 +14,7 @@ from database.db_manager import DatabaseManager
 from gui.person_form import PersonForm
 from gui.family_tree_view import FamilyTreeView
 from gui.stats_view import StatsView
+from gui.pension_view import PensionView  # NOUVEAU
 
 
 class MainWindow(QMainWindow):
@@ -22,231 +23,169 @@ class MainWindow(QMainWindow):
         self.db = DatabaseManager()
         self.current_person_id = None
         
-        self.setWindowTitle("🌳 Family Manager")
-        self.setMinimumSize(1200, 800)
+        self.setWindowTitle("Family Manager")
+        self.setMinimumSize(1400, 900)
         
         self.setup_ui()
         self.load_persons_list()
     
     def setup_ui(self):
-        # Widget central
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Layout principal horizontal
         main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
-        # ===== PANNEAU GAUCHE : Liste des personnes =====
+        # ===== PANNEAU GAUCHE : Sidebar =====
         left_panel = QFrame()
-        left_panel.setFrameStyle(QFrame.StyledPanel)
+        left_panel.setObjectName("sidebar")
+        left_panel.setMinimumWidth(320)
+        left_panel.setMaximumWidth(380)
         left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(20, 20, 20, 20)
+        left_layout.setSpacing(16)
         
-        # Titre
-        title = QLabel("👥 Membres de la famille")
+        # Logo / Titre
+        header_layout = QHBoxLayout()
+        logo = QLabel("🌳")
+        logo_font = QFont()
+        logo_font.setPointSize(24)
+        logo.setFont(logo_font)
+        header_layout.addWidget(logo)
+        
+        title = QLabel("Family Manager")
         title_font = QFont()
         title_font.setPointSize(14)
         title_font.setBold(True)
         title.setFont(title_font)
-        left_layout.addWidget(title)
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        left_layout.addLayout(header_layout)
+        
+        subtitle = QLabel("Gestion des familles de martyrs")
+        subtitle.setObjectName("subtitle")
+        left_layout.addWidget(subtitle)
+        
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setStyleSheet("color: #e2e8f0; max-height: 1px;")
+        left_layout.addWidget(separator)
         
         # ===== ZONE DE RECHERCHE =====
-        search_group = QFrame()
-        search_group.setStyleSheet("background-color: #f5f5f5; border-radius: 8px; padding: 5px;")
-        search_layout = QVBoxLayout(search_group)
-        search_layout.setSpacing(8)
+        search_container = QFrame()
+        search_container.setObjectName("card")
+        search_layout = QVBoxLayout(search_container)
+        search_layout.setContentsMargins(16, 16, 16, 16)
+        search_layout.setSpacing(12)
         
-        # Barre de recherche
         search_bar_layout = QHBoxLayout()
         search_icon = QLabel("🔍")
         search_bar_layout.addWidget(search_icon)
         
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Rechercher par nom, prénom ou CIN...")
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                padding: 8px;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                background-color: white;
-            }
-            QLineEdit:focus {
-                border: 1px solid #2196F3;
-            }
-        """)
         self.search_input.textChanged.connect(self.on_search_changed)
         search_bar_layout.addWidget(self.search_input)
-        
         search_layout.addLayout(search_bar_layout)
         
-        # Filtres
         filters_layout = QHBoxLayout()
+        filters_layout.setSpacing(8)
         
-        # Filtre Type
         self.filter_type = QComboBox()
         self.filter_type.addItems(["☪️ Martyrs", "👨‍👩‍👧‍👦 Familles", "👥 Tous"])
-        self.filter_type.setStyleSheet("""
-            QComboBox {
-                padding: 5px;
-                border: 1px solid #ddd;
-                border-radius: 3px;
-                background-color: white;
-            }
-        """)
         self.filter_type.currentIndexChanged.connect(self.on_filter_changed)
-        filters_layout.addWidget(QLabel("Type:"))
         filters_layout.addWidget(self.filter_type)
         
-        # Filtre Genre
         self.filter_gender = QComboBox()
         self.filter_gender.addItems(["Tous", "Homme", "Femme"])
-        self.filter_gender.setStyleSheet("""
-            QComboBox {
-                padding: 5px;
-                border: 1px solid #ddd;
-                border-radius: 3px;
-                background-color: white;
-            }
-        """)
         self.filter_gender.currentIndexChanged.connect(self.on_filter_changed)
-        filters_layout.addWidget(QLabel("Genre:"))
         filters_layout.addWidget(self.filter_gender)
         
-        # Bouton réinitialiser
-        self.btn_reset = QPushButton("🔄")
+        self.btn_reset = QPushButton("↺")
+        self.btn_reset.setObjectName("ghost")
         self.btn_reset.setToolTip("Réinitialiser les filtres")
-        self.btn_reset.setStyleSheet("""
-            QPushButton {
-                background-color: #757575;
-                color: white;
-                padding: 5px 10px;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #616161;
-            }
-        """)
+        self.btn_reset.setFixedSize(32, 32)
         self.btn_reset.clicked.connect(self.reset_filters)
         filters_layout.addWidget(self.btn_reset)
         
-        filters_layout.addStretch()
         search_layout.addLayout(filters_layout)
-        
-        left_layout.addWidget(search_group)
+        left_layout.addWidget(search_container)
         
         # Bouton ajouter
-        self.btn_add = QPushButton("➕ Ajouter un martyr")
-        self.btn_add.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                padding: 10px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-        """)
+        self.btn_add = QPushButton("+ Ajouter un martyr")
+        self.btn_add.setObjectName("primary")
+        self.btn_add.setMinimumHeight(44)
         self.btn_add.clicked.connect(self.show_add_form)
         left_layout.addWidget(self.btn_add)
         
-        # Tableau des personnes (avec colonne suppression)
+        # Label liste
+        list_header = QLabel("Membres")
+        list_header.setObjectName("statLabel")
+        left_layout.addWidget(list_header)
+        
+        # Tableau des personnes
         self.list_persons = QTableWidget()
-        self.list_persons.setColumnCount(3)  # Photo, Nom, Supprimer
+        self.list_persons.setColumnCount(3)
         self.list_persons.setHorizontalHeaderLabels(["", "Nom", ""])
         self.list_persons.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
         self.list_persons.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.list_persons.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
-        self.list_persons.setColumnWidth(0, 50)  # Photo
-        self.list_persons.setColumnWidth(2, 40)  # Bouton supprimer
+        self.list_persons.setColumnWidth(0, 44)
+        self.list_persons.setColumnWidth(2, 36)
         self.list_persons.horizontalHeader().hide()
         self.list_persons.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.list_persons.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.list_persons.setStyleSheet("""
-            QTableWidget {
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 5px;
-                gridline-color: transparent;
-            }
-            QTableWidget::item {
-                padding: 5px;
-                border-bottom: 1px solid #eee;
-                min-height: 45px;
-            }
-            QTableWidget::item:selected {
-                background-color: #e3f2fd;
-                color: #1976d2;
-            }
-            QHeaderView::section {
-                background-color: #f5f5f5;
-                padding: 5px;
-                font-weight: bold;
-                border: none;
-            }
-        """)
-        self.list_persons.setIconSize(QSize(35, 35))
+        self.list_persons.setIconSize(QSize(32, 32))
         self.list_persons.cellClicked.connect(self.on_person_selected_table)
         left_layout.addWidget(self.list_persons)
-
-        # Note: La suppression se fait via l'icône 🗑️ dans chaque ligne du tableau
         
-        # Bouton paramètres
+        # Bouton paramètres en bas
         self.btn_settings = QPushButton("⚙️ Paramètres")
-        self.btn_settings.setStyleSheet("""
-            QPushButton {
-                background-color: #607d8b;
-                color: white;
-                padding: 8px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #546e7a;
-            }
-        """)
+        self.btn_settings.setObjectName("ghost")
+        self.btn_settings.setMinimumHeight(40)
         self.btn_settings.clicked.connect(self.open_settings)
         left_layout.addWidget(self.btn_settings)
         
-        # ===== PANNEAU CENTRAL : Details et Arbre =====
+        # ===== PANNEAU DROIT : Contenu =====
         right_panel = QFrame()
         right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(24, 20, 24, 20)
+        right_layout.setSpacing(20)
         
-        # Onglets via boutons
-        tabs_layout = QHBoxLayout()
-        self.btn_details = QPushButton("📝 Details")
-        self.btn_tree = QPushButton("🌳 Arbre genealogique")
+        # Header avec onglets — 4 onglets maintenant
+        header_container = QFrame()
+        header_container.setObjectName("card")
+        header_layout = QHBoxLayout(header_container)
+        header_layout.setContentsMargins(4, 4, 4, 0)
+        header_layout.setSpacing(0)
+        
+        self.btn_details = QPushButton("📝 Détails")
+        self.btn_tree = QPushButton("🌳 Arbre")
         self.btn_stats = QPushButton("📊 Stats")
+        self.btn_pensions = QPushButton("💰 Pensions")  # NOUVEAU ONGLET
         
-        for btn in [self.btn_details, self.btn_tree, self.btn_stats]:
+        self.tab_buttons = [self.btn_details, self.btn_tree, self.btn_stats, self.btn_pensions]
+        for btn in self.tab_buttons:
+            btn.setObjectName("tab")
             btn.setCheckable(True)
-            btn.setStyleSheet("""
-                QPushButton {
-                    padding: 10px 20px;
-                    border: none;
-                    background-color: #f5f5f5;
-                    font-weight: bold;
-                }
-                QPushButton:checked {
-                    background-color: #1976d2;
-                    color: white;
-                }
-            """)
-            tabs_layout.addWidget(btn)
+            btn.setCursor(Qt.PointingHandCursor)
+            header_layout.addWidget(btn)
+        
+        header_layout.addStretch()
         
         self.btn_details.setChecked(True)
         self.btn_details.clicked.connect(lambda: self.switch_tab("details"))
         self.btn_tree.clicked.connect(lambda: self.switch_tab("tree"))
         self.btn_stats.clicked.connect(lambda: self.switch_tab("stats"))
+        self.btn_pensions.clicked.connect(lambda: self.switch_tab("pensions"))
         
-        right_layout.addLayout(tabs_layout)
+        right_layout.addWidget(header_container)
         
-        # ===== QStackedWidget pour switcher proprement =====
+        # ===== QStackedWidget — 4 vues =====
         self.stack = QStackedWidget()
         
-        # 1. Formulaire de details
+        # 1. Formulaire de détails
         self.person_form = PersonForm(self.db)
         self.person_form.person_saved.connect(self.on_person_saved)
         self.person_form.add_relation_requested.connect(self.on_family_member_added)
@@ -256,65 +195,61 @@ class MainWindow(QMainWindow):
         self.tree_view = FamilyTreeView(self.db)
         self.stack.addWidget(self.tree_view)
         
-        # 3. Vue des statistiques
+        # 3. Vue des statistiques — SANS pensions
         self.stats_view = StatsView(self.db)
         self.stack.addWidget(self.stats_view)
         
+        # 4. Vue des pensions — NOUVEAU
+        self.pension_view = PensionView(self.db)
+        self.stack.addWidget(self.pension_view)
+        
         right_layout.addWidget(self.stack)
         
-        # ===== ASSEMBLAGE =====
+        # ===== ASSEMBLAGE AVEC SPLITTER =====
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
-        splitter.setSizes([350, 850])
+        splitter.setSizes([340, 1060])
+        splitter.setHandleWidth(1)
         
         main_layout.addWidget(splitter)
     
     def switch_tab(self, tab_name):
-        self.btn_details.setChecked(tab_name == "details")
-        self.btn_tree.setChecked(tab_name == "tree")
-        self.btn_stats.setChecked(tab_name == "stats")
+        for btn in self.tab_buttons:
+            btn.setChecked(False)
         
         if tab_name == "details":
+            self.btn_details.setChecked(True)
             self.stack.setCurrentIndex(0)
         elif tab_name == "tree":
+            self.btn_tree.setChecked(True)
             self.stack.setCurrentIndex(1)
             if self.current_person_id:
                 self.tree_view.current_person_id = self.current_person_id
                 self.tree_view.load_tree(self.current_person_id)
-        else:  # stats
+        elif tab_name == "stats":
+            self.btn_stats.setChecked(True)
             self.stack.setCurrentIndex(2)
             self.stats_view.load_stats()
+        else:  # pensions
+            self.btn_pensions.setChecked(True)
+            self.stack.setCurrentIndex(3)
+            self.pension_view.load_pensions()
     
     def load_persons_list(self):
-        """Charge la liste avec les filtres par defaut (Martyrs)"""
         self.apply_filters()
     
     def on_person_selected_table(self, row, column):
-        """Gère le clic sur une ligne du tableau"""
-        # Si clic sur colonne suppression (colonne 2)
         if column == 2:
             person_id = self.list_persons.item(row, 1).data(Qt.UserRole)
             self.delete_person(person_id)
             return
         
-        # Sinon, sélectionner la personne
         person_id = self.list_persons.item(row, 1).data(Qt.UserRole)
-        self.current_person_id = person_id
-        
-        self.tree_view.current_person_id = person_id
-        
-        person = self.db.get_person(person_id)
-        if person:
-            self.person_form.load_person(person)
-            if self.btn_tree.isChecked():
-                self.tree_view.load_tree(person_id)
+        self.select_person(person_id)
     
-    def on_person_selected(self, item):
-        """Ancienne méthode pour compatibilité"""
-        person_id = item.data(Qt.UserRole)
+    def select_person(self, person_id):
         self.current_person_id = person_id
-        
         self.tree_view.current_person_id = person_id
         
         person = self.db.get_person(person_id)
@@ -342,8 +277,8 @@ class MainWindow(QMainWindow):
         
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
-            "Es-tu sur de vouloir supprimer cette personne ?\n"
-            "Toutes ses relations seront egalement supprimees.",
+            "Êtes-vous sûr de vouloir supprimer cette personne ?\n"
+            "Toutes ses relations seront également supprimées.",
             QMessageBox.Yes | QMessageBox.No
         )
         
@@ -353,46 +288,41 @@ class MainWindow(QMainWindow):
                 self.current_person_id = None
                 self.person_form.clear_form()
             self.load_persons_list()
-            QMessageBox.information(self, "Succes", "Personne supprimee !")
+            QMessageBox.information(self, "Succès", "Personne supprimée !")
 
     def on_family_member_added(self):
         if self.btn_tree.isChecked():
             self.tree_view.load_tree(self.current_person_id)
-        QMessageBox.information(self, "Succes", "Membre de la famille ajoute !")
+        QMessageBox.information(self, "Succès", "Membre de la famille ajouté !")
 
     def on_search_changed(self, text):
-        """Filtre la liste en temps reel selon la recherche"""
         self.apply_filters()
     
     def on_filter_changed(self):
-        """Filtre la liste quand les filtres changent"""
         self.apply_filters()
     
     def create_default_avatar(self, gender):
-        """Crée une icône avatar par défaut selon le genre"""
-        size = 40
+        size = 32
         pixmap = QPixmap(size, size)
         pixmap.fill(Qt.transparent)
         
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
         
-        # Cercle de fond
         if gender == "M":
-            color = QColor("#64b5f6")  # Bleu homme
+            color = QColor("#818cf8")
         elif gender == "F":
-            color = QColor("#f06292")  # Rose femme
+            color = QColor("#f472b6")
         else:
-            color = QColor("#bdbdbd")  # Gris inconnu
+            color = QColor("#94a3b8")
         
         painter.setBrush(QBrush(color))
         painter.setPen(Qt.NoPen)
-        painter.drawEllipse(2, 2, size-4, size-4)
+        painter.drawEllipse(1, 1, size-2, size-2)
         
-        # Initiale
         painter.setPen(QColor("white"))
         font = painter.font()
-        font.setPointSize(14)
+        font.setPointSize(10)
         font.setBold(True)
         painter.setFont(font)
         
@@ -403,9 +333,7 @@ class MainWindow(QMainWindow):
         return QIcon(pixmap)
     
     def apply_filters(self):
-        """Applique tous les filtres (recherche + type + genre)"""
         search_text = self.search_input.text().strip().lower()
-        
         type_filter = self.filter_type.currentIndex()
         
         gender_map = {0: None, 1: "M", 2: "F"}
@@ -430,52 +358,45 @@ class MainWindow(QMainWindow):
         self.list_persons.setRowCount(0)
         for row, person in enumerate(persons):
             self.list_persons.insertRow(row)
-            self.list_persons.setRowHeight(row, 50)
+            self.list_persons.setRowHeight(row, 52)
             
             full_name = f"{person['first_name']} {person['last_name']}"
             
             if person.get('is_martyr'):
-                full_name += " ☪️"
+                full_name += "  ☪️"
             elif person.get('is_martyr_family'):
-                full_name += " 👨‍👩‍👧‍👦"
-            elif person.get('cin'):
-                full_name += f" [CIN: {person['cin']}]"
-            elif person.get('birth_date'):
-                full_name += f" ({person['birth_date'][:4]})"
+                full_name += "  👨‍👩‍👧‍👦"
             
-            # Colonne 0: Photo
             photo_item = QTableWidgetItem()
             photo_path = person.get('photo_path')
             if photo_path and os.path.exists(photo_path):
                 pixmap = QPixmap(photo_path)
                 if not pixmap.isNull():
-                    icon = QIcon(pixmap.scaled(35, 35, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                    icon = QIcon(pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
                     photo_item.setIcon(icon)
                 else:
                     photo_item.setIcon(self.create_default_avatar(person.get('gender')))
             else:
                 photo_item.setIcon(self.create_default_avatar(person.get('gender')))
             photo_item.setTextAlignment(Qt.AlignCenter)
+            photo_item.setFlags(photo_item.flags() & ~Qt.ItemIsEditable)
             self.list_persons.setItem(row, 0, photo_item)
             
-            # Colonne 1: Nom (avec person_id dans les données)
             name_item = QTableWidgetItem(full_name)
             name_item.setData(Qt.UserRole, person['id'])
             self.list_persons.setItem(row, 1, name_item)
             
-            # Colonne 2: Bouton supprimer 🗑️
             delete_item = QTableWidgetItem("✕")
             delete_item.setTextAlignment(Qt.AlignCenter)
             delete_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            delete_item.setForeground(QBrush(QColor("#f44336")))  # Rouge
+            delete_item.setForeground(QBrush(QColor("#ef4444")))
             font = delete_item.font()
-            font.setPointSize(14)
+            font.setPointSize(12)
             font.setBold(True)
             delete_item.setFont(font)
             self.list_persons.setItem(row, 2, delete_item)
     
     def reset_filters(self):
-        """Reinitialise tous les filtres"""
         self.search_input.clear()
         self.filter_type.setCurrentIndex(0)
         self.filter_gender.setCurrentIndex(0)

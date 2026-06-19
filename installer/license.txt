@@ -1,0 +1,4 @@
+Family Manager v1.0.0
+
+Copyright (c) 2024 FamilyManager Team
+Usage personnel gratuit.

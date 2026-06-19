@@ -1,11 +1,45 @@
 import sqlite3
 import os
+import sys
 from datetime import datetime
+from pathlib import Path
+
+
+def get_app_data_dir():
+    """
+    Retourne le dossier de données de l'application.
+    Utilise AppData/Local pour être sûr d'avoir les droits d'écriture.
+    """
+    if sys.platform == 'win32':
+        # Windows : AppData\Local\FamilyManager
+        base_dir = Path(os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))) / 'FamilyManager'
+    else:
+        # Linux/Mac : ~/.local/share/FamilyManager
+        base_dir = Path.home() / '.local' / 'share' / 'FamilyManager'
+    
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return base_dir
+
+
+def get_db_path():
+    """Retourne le chemin absolu de la base de données."""
+    app_dir = get_app_data_dir()
+    db_dir = app_dir / "database"
+    db_dir.mkdir(parents=True, exist_ok=True)
+    return str(db_dir / "family_tree.db")
+
+
+def get_photos_dir():
+    """Retourne le chemin du dossier photos."""
+    app_dir = get_app_data_dir()
+    photos_dir = app_dir / "photos"
+    photos_dir.mkdir(parents=True, exist_ok=True)
+    return str(photos_dir)
 
 
 class DatabaseManager:
-    def __init__(self, db_path="family_tree.db"):
-        self.db_path = db_path
+    def __init__(self, db_path=None):
+        self.db_path = db_path or get_db_path()
         self.conn = None
         self.create_tables()
     
@@ -67,7 +101,7 @@ class DatabaseManager:
             VALUES ('smig', '460')
         """)
 
-        # Configuration des pensions (dans la table config existante)
+        # Configuration des pensions
         pension_defaults = [
             ('pension_conjoint', '40'),
             ('pension_enfant', '40'),
@@ -95,11 +129,10 @@ class DatabaseManager:
                 UNIQUE(martyr_id, beneficiary_id, payment_month, payment_year)
             )
         """)
-
         
         conn.commit()
         conn.close()
-        print("✅ Base de données créée avec succès !")
+        print(f"✅ Base de données prête : {self.db_path}")
     
     # ========== CRUD PERSONS ==========
     
@@ -161,7 +194,6 @@ class DatabaseManager:
         cursor.execute("SELECT photo_path FROM persons WHERE id = ?", (person_id,))
         row = cursor.fetchone()
         if row and row['photo_path']:
-            import os
             try:
                 os.remove(row['photo_path'])
             except Exception as e:
@@ -176,6 +208,7 @@ class DatabaseManager:
         
         conn.commit()
         conn.close()
+    
     # ========== RELATIONSHIPS ==========
     
     def add_relationship(self, person1_id, person2_id, relation_type):
@@ -205,7 +238,6 @@ class DatabaseManager:
         return relations
     
     def get_martyrs(self):
-        """Récupère uniquement les martyrs"""
         conn = self.connect()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM persons WHERE is_martyr = 1 ORDER BY last_name, first_name")
@@ -214,7 +246,6 @@ class DatabaseManager:
         return persons
     
     def get_martyr_families(self):
-        """Récupère uniquement les familles de martyrs"""
         conn = self.connect()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM persons WHERE is_martyr_family = 1 ORDER BY last_name, first_name")
@@ -223,11 +254,9 @@ class DatabaseManager:
         return persons
     
     def get_family_members(self, person_id):
-        """Récupère tous les membres de la famille d'une personne"""
         conn = self.connect()
         cursor = conn.cursor()
         
-        # Trouver toutes les personnes connectées par relation
         cursor.execute("""
             SELECT DISTINCT p.* FROM persons p
             WHERE p.id = ?
@@ -243,29 +272,23 @@ class DatabaseManager:
         return members
 
     def get_stats(self):
-        """Récupère les statistiques globales"""
         conn = self.connect()
         cursor = conn.cursor()
         
         stats = {}
         
-        # Total martyrs
         cursor.execute("SELECT COUNT(*) FROM persons WHERE is_martyr = 1")
         stats['total_martyrs'] = cursor.fetchone()[0]
         
-        # Total familles
         cursor.execute("SELECT COUNT(*) FROM persons WHERE is_martyr_family = 1")
         stats['total_families'] = cursor.fetchone()[0]
         
-        # Total personnes
         cursor.execute("SELECT COUNT(*) FROM persons")
         stats['total_persons'] = cursor.fetchone()[0]
         
-        # Répartition par genre
         cursor.execute("SELECT gender, COUNT(*) FROM persons GROUP BY gender")
         stats['gender_distribution'] = {row[0]: row[1] for row in cursor.fetchall()}
         
-        # Martyrs sans famille (pas de relations)
         cursor.execute("""
             SELECT COUNT(*) FROM persons p
             WHERE p.is_martyr = 1
@@ -277,7 +300,6 @@ class DatabaseManager:
         """)
         stats['martyrs_without_family'] = cursor.fetchone()[0]
         
-        # Personnes sans CIN
         cursor.execute("SELECT COUNT(*) FROM persons WHERE cin IS NULL OR cin = ''")
         stats['without_cin'] = cursor.fetchone()[0]
         
@@ -311,17 +333,14 @@ class DatabaseManager:
         self.set_config('smig', str(valeur))
     
     def get_pension_pourcentage(self, type_pension):
-        """Récupère le pourcentage d'une pension depuis config"""
         key = f'pension_{type_pension}'
         return int(self.get_config(key, '0'))
     
     def set_pension_pourcentage(self, type_pension, pourcentage):
-        """Modifie le pourcentage d'une pension dans config"""
         key = f'pension_{type_pension}'
         self.set_config(key, str(pourcentage))
     
     def get_all_pension_pourcentages(self):
-        """Récupère tous les pourcentages"""
         return {
             'conjoint': self.get_pension_pourcentage('conjoint'),
             'enfant': self.get_pension_pourcentage('enfant'),
@@ -330,7 +349,6 @@ class DatabaseManager:
         }
     
     def calculer_pension(self, type_pension):
-        """Calcule le montant d'une pension selon SMIG et pourcentage"""
         smig = self.get_smig()
         pourcentage = self.get_pension_pourcentage(type_pension)
         return smig * (pourcentage / 100)
@@ -338,11 +356,9 @@ class DatabaseManager:
     # ========== PENSION PAYMENTS ==========
 
     def get_martyr_family_for_pension(self, martyr_id):
-        """Récupère les membres de famille vivants d'un martyr pour calcul des pensions"""
         conn = self.connect()
         cursor = conn.cursor()
 
-        # Récupérer le martyr
         cursor.execute("SELECT * FROM persons WHERE id = ? AND is_martyr = 1", (martyr_id,))
         martyr = cursor.fetchone()
         if not martyr:
@@ -351,7 +367,6 @@ class DatabaseManager:
 
         martyr = dict(martyr)
 
-        # Récupérer toutes les relations
         cursor.execute("""
             SELECT r.*, p.* FROM relationships r
             JOIN persons p ON (r.person1_id = p.id OR r.person2_id = p.id)
@@ -363,7 +378,6 @@ class DatabaseManager:
         relations = [dict(row) for row in cursor.fetchall()]
         conn.close()
 
-        # Organiser par type de relation
         family = {
             'martyr': martyr,
             'parents': [],
@@ -378,7 +392,6 @@ class DatabaseManager:
             else:
                 other_id = rel['person1_id']
 
-            # Récupérer la personne complète
             person = self.get_person(other_id)
             if person and (not person.get('death_date') or not person['death_date'].strip()):
                 rel_type = rel['relation_type']
@@ -394,7 +407,6 @@ class DatabaseManager:
         return family
 
     def calculate_pensions(self, martyr_id):
-        """Calcule les pensions pour un martyr selon les règles"""
         family = self.get_martyr_family_for_pension(martyr_id)
         if not family:
             return []
@@ -408,15 +420,12 @@ class DatabaseManager:
         marital_status = martyr.get('marital_status', 'celibataire')
 
         if marital_status == 'celibataire':
-            # Martyr célibataire
             parents = family['parents']
             siblings = family['siblings']
 
             if parents:
-                # Parents vivants → 100% aux parents
                 num_parents = len(parents)
                 if num_parents == 1:
-                    # Un seul parent vivant → 100%
                     parent = parents[0]
                     pensions.append({
                         'beneficiary_id': parent['id'],
@@ -426,7 +435,6 @@ class DatabaseManager:
                         'percentage': 100
                     })
                 else:
-                    # Deux parents vivants → 50% chacun
                     for parent in parents:
                         pensions.append({
                             'beneficiary_id': parent['id'],
@@ -436,7 +444,6 @@ class DatabaseManager:
                             'percentage': 50
                         })
             elif siblings:
-                # Parents morts → frères/sœurs se partagent
                 num_siblings = len(siblings)
                 for sibling in siblings:
                     pensions.append({
@@ -447,13 +454,11 @@ class DatabaseManager:
                         'percentage': round(100 / num_siblings, 2)
                     })
 
-        else:  # marié
-            # Martyr marié
+        else:
             parents = family['parents']
             spouses = family['spouses']
             children = family['children']
 
-            # Parents : 20%
             if parents:
                 parent_share = total_pension * 0.20
                 num_parents = len(parents)
@@ -466,7 +471,6 @@ class DatabaseManager:
                         'percentage': round(20 / num_parents, 2)
                     })
 
-            # Conjoint(e) : 40%
             if spouses:
                 spouse_share = total_pension * 0.40
                 num_spouses = len(spouses)
@@ -479,7 +483,6 @@ class DatabaseManager:
                         'percentage': round(40 / num_spouses, 2)
                     })
 
-            # Enfants : 40%
             if children:
                 children_share = total_pension * 0.40
                 num_children = len(children)
@@ -495,7 +498,6 @@ class DatabaseManager:
         return pensions
 
     def pay_pensions(self, month, year):
-        """Paie les pensions pour tous les martyrs pour un mois donné"""
         conn = self.connect()
         cursor = conn.cursor()
 
@@ -522,7 +524,6 @@ class DatabaseManager:
             for pension in pensions:
                 beneficiary_id = pension['beneficiary_id']
 
-                # Vérifier si déjà payé ce mois
                 cursor.execute("""
                     SELECT id FROM pension_payments 
                     WHERE martyr_id = ? AND beneficiary_id = ? 
@@ -564,8 +565,36 @@ class DatabaseManager:
         conn.close()
         return results
 
+    def cancel_pensions(self, month, year):
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT pp.*, 
+                   m.first_name as martyr_first, m.last_name as martyr_last,
+                   b.first_name as ben_first, b.last_name as ben_last
+            FROM pension_payments pp
+            JOIN persons m ON pp.martyr_id = m.id
+            JOIN persons b ON pp.beneficiary_id = b.id
+            WHERE pp.payment_month = ? AND pp.payment_year = ?
+        """, (month, year))
+        
+        deleted = [dict(row) for row in cursor.fetchall()]
+
+        cursor.execute("""
+            DELETE FROM pension_payments 
+            WHERE payment_month = ? AND payment_year = ?
+        """, (month, year))
+
+        conn.commit()
+        conn.close()
+
+        return {
+            'deleted': deleted,
+            'count': len(deleted)
+        }
+
     def get_pension_history(self, martyr_id=None, month=None, year=None):
-        """Récupère l'historique des paiements de pensions"""
         conn = self.connect()
         cursor = conn.cursor()
 
@@ -598,7 +627,6 @@ class DatabaseManager:
         return payments
 
     def get_total_pensions_paid(self, month=None, year=None):
-        """Calcule le total des pensions payées"""
         conn = self.connect()
         cursor = conn.cursor()
 

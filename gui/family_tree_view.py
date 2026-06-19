@@ -2,10 +2,10 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTreeWidget, 
     QTreeWidgetItem, QPushButton, QHBoxLayout, QComboBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QStackedWidget,
-    QAbstractItemView, QCheckBox, QMessageBox
+    QAbstractItemView, QCheckBox, QMessageBox, QFrame
 )
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QPixmap, QIcon, QPainter, QBrush, QColor
+from PySide6.QtGui import QPixmap, QIcon, QPainter, QBrush, QColor, QFont
 
 import os
 import sys
@@ -29,38 +29,29 @@ class FamilyTreeView(QWidget):
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(20)
 
-        # Titre
-        title = QLabel("🌳 Arbre généalogique / Tableau familial")
-        title_font = title.font()
-        title_font.setPointSize(12)
-        title_font.setBold(True)
-        title.setFont(title_font)
-        layout.addWidget(title)
+        # Header
+        header = QLabel("🌳 Arbre généalogique")
+        header.setObjectName("title")
+        layout.addWidget(header)
 
         # Contrôles
         controls = QHBoxLayout()
+        controls.setSpacing(12)
 
-        controls.addWidget(QLabel("Centrer sur:"))
+        controls.addWidget(QLabel("Centrer sur :"))
 
         self.combo_persons = QComboBox()
+        self.combo_persons.setMinimumWidth(240)
         self.combo_persons.currentIndexChanged.connect(self.on_combo_changed)
         controls.addWidget(self.combo_persons)
 
         # Bouton toggle Arbre / Tableau
         self.btn_toggle = QPushButton("📊 Voir Tableau")
-        self.btn_toggle.setStyleSheet("""
-            QPushButton {
-                background-color: #1976d2;
-                color: white;
-                padding: 8px 15px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #1565c0;
-            }
-        """)
+        self.btn_toggle.setObjectName("primary")
+        self.btn_toggle.setMinimumHeight(36)
         self.btn_toggle.clicked.connect(self.toggle_view)
         controls.addWidget(self.btn_toggle)
 
@@ -70,61 +61,52 @@ class FamilyTreeView(QWidget):
         # Stack pour switcher entre Arbre et Tableau
         self.stack = QStackedWidget()
 
-        # ===== VUE ARBRE (QTreeWidget avec photos) =====
+        # ===== VUE ARBRE =====
         self.tree_widget = QWidget()
         tree_layout = QVBoxLayout(self.tree_widget)
+        tree_layout.setContentsMargins(0, 0, 0, 0)
 
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
-        self.tree.setIconSize(QSize(50, 50))
+        self.tree.setIconSize(QSize(44, 44))
         self.tree.setStyleSheet("""
             QTreeWidget {
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 10px;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                padding: 8px;
+                outline: none;
             }
             QTreeWidget::item {
-                padding: 8px;
-                min-height: 55px;
-                border-bottom: 1px solid #eee;
+                padding: 10px;
+                min-height: 52px;
+                border-radius: 8px;
+                margin: 2px 4px;
             }
             QTreeWidget::item:selected {
-                background-color: #e3f2fd;
+                background-color: #e0e7ff;
+                color: #4338ca;
+            }
+            QTreeWidget::item:hover {
+                background-color: #f8fafc;
             }
         """)
         tree_layout.addWidget(self.tree)
 
-        # ===== VUE TABLEAU (avec photos) =====
+        # ===== VUE TABLEAU =====
         self.table_widget = QWidget()
         table_layout = QVBoxLayout(self.table_widget)
+        table_layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
         self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels([
-            "Photo", "Nom", "CIN", "Relation", "Genre", "Date naissance", "En vie", "Date décès", "Statut", "Action"
+            "Photo", "Nom", "CIN", "Relation", "Genre", "Naissance", "En vie", "Décès", "Statut", ""
         ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(9, QHeaderView.Fixed)
-        self.table.setColumnWidth(0, 60)
-        self.table.setColumnWidth(9, 60)
-        self.table.setStyleSheet("""
-            QTableWidget {
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                gridline-color: #eee;
-            }
-            QTableWidget::item {
-                padding: 5px;
-            }
-            QHeaderView::section {
-                background-color: #1976d2;
-                color: white;
-                padding: 10px;
-                font-weight: bold;
-            }
-        """)
-        self.table.setIconSize(QSize(40, 40))
+        self.table.setColumnWidth(0, 52)
+        self.table.setColumnWidth(9, 44)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.cellClicked.connect(self.on_table_cell_clicked)
         table_layout.addWidget(self.table)
@@ -171,11 +153,11 @@ class FamilyTreeView(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         if gender == "M":
-            color = QColor("#64b5f6")
+            color = QColor("#818cf8")
         elif gender == "F":
-            color = QColor("#f06292")
+            color = QColor("#f472b6")
         else:
-            color = QColor("#bdbdbd")
+            color = QColor("#94a3b8")
 
         painter.setBrush(QBrush(color))
         painter.setPen(Qt.NoPen)
@@ -183,7 +165,7 @@ class FamilyTreeView(QWidget):
 
         painter.setPen(QColor("white"))
         font = painter.font()
-        font.setPointSize(12)
+        font.setPointSize(11)
         font.setBold(True)
         painter.setFont(font)
 
@@ -193,7 +175,7 @@ class FamilyTreeView(QWidget):
         painter.end()
         return QIcon(pixmap)
 
-    def get_person_icon(self, person, size=50):
+    def get_person_icon(self, person, size=44):
         """Retourne l'icône d'une personne (photo ou avatar)"""
         photo_path = person.get('photo_path')
         person_id = person.get('id')
@@ -203,11 +185,11 @@ class FamilyTreeView(QWidget):
             if not pixmap.isNull():
                 return QIcon(pixmap.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
-        photos_dir = self.get_photos_dir()
-        if person_id and os.path.exists(photos_dir):
-            for f in os.listdir(photos_dir):
+        purchases_dir = self.get_photos_dir()
+        if person_id and os.path.exists(purchases_dir):
+            for f in os.listdir(purchases_dir):
                 if f.startswith(f"person_{person_id}."):
-                    full_path = os.path.join(photos_dir, f)
+                    full_path = os.path.join(purchases_dir, f)
                     pixmap = QPixmap(full_path)
                     if not pixmap.isNull():
                         return QIcon(pixmap.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -225,13 +207,13 @@ class FamilyTreeView(QWidget):
 
         root_text = f"{person['first_name']} {person['last_name']}"
         if person.get('is_martyr'):
-            root_text += " ☪️"
+            root_text += "  ☪️"
 
         root = QTreeWidgetItem(self.tree)
         root.setText(0, root_text)
-        root.setIcon(0, self.get_person_icon(person, 50))
+        root.setIcon(0, self.get_person_icon(person, 44))
         root.setData(0, Qt.UserRole, person['id'])
-        root.setSizeHint(0, QSize(0, 60))
+        root.setSizeHint(0, QSize(0, 56))
 
         self._load_relations_recursive(root, person_id, set())
         self.tree.expandAll()
@@ -268,16 +250,16 @@ class FamilyTreeView(QWidget):
 
             label = f"{other['first_name']} {other['last_name']}"
             if other.get('is_martyr_family'):
-                label += " 👨‍👩‍👧‍👦"
+                label += "  👨‍👩‍👧‍👦"
 
             node.setText(0, f"{type_labels.get(rel_type, rel_type)} : {label}")
-            node.setIcon(0, self.get_person_icon(other, 50))
+            node.setIcon(0, self.get_person_icon(other, 44))
             node.setData(0, Qt.UserRole, other_id)
-            node.setSizeHint(0, QSize(0, 55))
+            node.setSizeHint(0, QSize(0, 52))
 
             self._load_relations_recursive(node, other_id, visited.copy())
 
-    def on_alive_toggled(self, checkbox, person_id, checked):
+    def on_alive_toggled(self, person_id, checked):
         """Appelé quand on coche/décoche la case 'En vie'"""
         if checked:
             self.db.update_person(person_id, death_date=None)
@@ -300,14 +282,14 @@ class FamilyTreeView(QWidget):
         """Supprime un membre de la famille"""
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
-            "Es-tu sûr de vouloir supprimer " + person_name + " ?\n"
+            f"Êtes-vous sûr de vouloir supprimer {person_name} ?\n"
             "Cette personne sera supprimée définitivement.",
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
             self.db.delete_person(person_id)
-            QMessageBox.information(self, "Succès", person_name + " a été supprimé(e) !")
+            QMessageBox.information(self, "Succès", f"{person_name} a été supprimé(e) !")
             self.load_table()
 
     def load_table(self):
@@ -337,14 +319,13 @@ class FamilyTreeView(QWidget):
         row = 0
         for person in all_persons.values():
             self.table.insertRow(row)
-            self.table.setRowHeight(row, 55)
+            self.table.setRowHeight(row, 52)
 
-            # Vérifier si c'est le martyr central
             is_martyr = (person['id'] == martyr['id'])
 
             # === COLONNE 0 : PHOTO ===
             photo_item = QTableWidgetItem()
-            photo_item.setIcon(self.get_person_icon(person, 40))
+            photo_item.setIcon(self.get_person_icon(person, 36))
             photo_item.setTextAlignment(Qt.AlignCenter)
             if is_martyr:
                 photo_item.setFlags(photo_item.flags() & ~Qt.ItemIsEditable)
@@ -353,15 +334,16 @@ class FamilyTreeView(QWidget):
             # === COLONNE 1 : NOM ===
             name_item = QTableWidgetItem(f"{person['first_name']} {person['last_name']}")
             if person.get('is_martyr'):
-                name_item.setText("☪️ " + name_item.text())
+                name_item.setText("☪️  " + name_item.text())
             elif person.get('is_martyr_family'):
-                name_item.setText("👨‍👩‍👧‍👦 " + name_item.text())
+                name_item.setText("👨‍👩‍👧‍👦  " + name_item.text())
             if is_martyr:
                 name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
             self.table.setItem(row, 1, name_item)
 
             # === COLONNE 2 : CIN ===
-            cin_item = QTableWidgetItem(person.get('cin') or "-")
+            cin_item = QTableWidgetItem(person.get('cin') or "—")
+            cin_item.setForeground(QBrush(QColor("#94a3b8")))
             if is_martyr:
                 cin_item.setFlags(cin_item.flags() & ~Qt.ItemIsEditable)
             self.table.setItem(row, 2, cin_item)
@@ -374,14 +356,15 @@ class FamilyTreeView(QWidget):
             self.table.setItem(row, 3, relation_item)
 
             # === COLONNE 4 : GENRE ===
-            gender_map = {"M": "Homme", "F": "Femme", "O": "Autre", None: "-"}
-            gender_item = QTableWidgetItem(gender_map.get(person.get('gender'), "-"))
+            gender_map = {"M": "Homme", "F": "Femme", "O": "Autre", None: "—"}
+            gender_item = QTableWidgetItem(gender_map.get(person.get('gender'), "—"))
             if is_martyr:
                 gender_item.setFlags(gender_item.flags() & ~Qt.ItemIsEditable)
             self.table.setItem(row, 4, gender_item)
 
             # === COLONNE 5 : DATE NAISSANCE ===
-            birth_item = QTableWidgetItem(person.get('birth_date') or "-")
+            birth_item = QTableWidgetItem(person.get('birth_date') or "—")
+            birth_item.setForeground(QBrush(QColor("#94a3b8")))
             if is_martyr:
                 birth_item.setFlags(birth_item.flags() & ~Qt.ItemIsEditable)
             self.table.setItem(row, 5, birth_item)
@@ -392,11 +375,7 @@ class FamilyTreeView(QWidget):
 
             chk_alive = QCheckBox()
             chk_alive.setChecked(is_alive)
-            chk_alive.setEnabled(not is_martyr)  # Désactiver si c'est le martyr
-            chk_alive.setStyleSheet("""
-                QCheckBox::indicator { width: 18px; height: 18px; }
-                QCheckBox::indicator:disabled { opacity: 0.5; }
-            """)
+            chk_alive.setEnabled(not is_martyr)
             if is_martyr:
                 chk_alive.setToolTip("Le martyr ne peut pas être modifié ici")
 
@@ -411,7 +390,7 @@ class FamilyTreeView(QWidget):
                 person_id_copy = person['id']
                 chk_alive.toggled.connect(
                     lambda checked, pid=person_id_copy: 
-                    self.on_alive_toggled(None, pid, checked)
+                    self.on_alive_toggled(pid, checked)
                 )
 
             # === COLONNE 7 : DATE DÉCÈS ===
@@ -423,10 +402,10 @@ class FamilyTreeView(QWidget):
                     date_formatted = death_date_str
 
                 death_item = QTableWidgetItem(date_formatted)
-                death_item.setForeground(QBrush(QColor("#f44336")))
+                death_item.setForeground(QBrush(QColor("#dc2626")))
             else:
-                death_item = QTableWidgetItem("-")
-                death_item.setForeground(QBrush(QColor("#4caf50")))
+                death_item = QTableWidgetItem("—")
+                death_item.setForeground(QBrush(QColor("#16a34a")))
 
             font = death_item.font()
             font.setBold(True)
@@ -442,20 +421,20 @@ class FamilyTreeView(QWidget):
             elif person.get('is_martyr_family'):
                 status = "👨‍👩‍👧‍👦 Famille"
             else:
-                status = "-"
+                status = "—"
             status_item = QTableWidgetItem(status)
             if is_martyr:
                 status_item.setFlags(status_item.flags() & ~Qt.ItemIsEditable)
             self.table.setItem(row, 8, status_item)
 
-            # === COLONNE 9 : SUPPRIMER (même style que main_window) ===
+            # === COLONNE 9 : SUPPRIMER ===
             if not is_martyr:
                 delete_item = QTableWidgetItem("✕")
                 delete_item.setTextAlignment(Qt.AlignCenter)
                 delete_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-                delete_item.setForeground(QBrush(QColor("#f44336")))
+                delete_item.setForeground(QBrush(QColor("#dc2626")))
                 font = delete_item.font()
-                font.setPointSize(14)
+                font.setPointSize(13)
                 font.setBold(True)
                 delete_item.setFont(font)
                 delete_item.setData(Qt.UserRole, person['id'])
@@ -465,7 +444,7 @@ class FamilyTreeView(QWidget):
                 empty_item = QTableWidgetItem("—")
                 empty_item.setTextAlignment(Qt.AlignCenter)
                 empty_item.setFlags(Qt.ItemIsEnabled)
-                empty_item.setForeground(QBrush(QColor("#999999")))
+                empty_item.setForeground(QBrush(QColor("#cbd5e1")))
                 self.table.setItem(row, 9, empty_item)
 
             row += 1
