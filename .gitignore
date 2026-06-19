@@ -96,3 +96,4 @@ installer
 *.backup
 nsis.zip
 *.db
+photos/
