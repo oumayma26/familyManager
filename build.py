@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script de build pour Family Manager (Windows)
-Génère un .exe autonome + installateur NSIS
+Génère : .exe autonome + installateur NSIS + update.json
 Tout est automatisé, aucune commande manuelle requise.
 """
 
@@ -12,16 +12,22 @@ import subprocess
 import importlib.util
 import urllib.request
 import zipfile
+import json
+import hashlib
 from pathlib import Path
+from datetime import datetime
 
 
 # ==================== CONFIGURATION ====================
 
 APP_NAME = "FamilyManager"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.2.0"  # ← Bump ici
 APP_PUBLISHER = "FamilyManager Team"
 MAIN_SCRIPT = "main.py"
 ICON_PATH = "assets/icon/islam.ico"
+
+# URL de base où seront hébergés les fichiers (à adapter)
+UPDATE_BASE_URL = "https://ton-site.com/downloads"
 
 NSIS_URL = "https://sourceforge.net/projects/nsis/files/NSIS%203/3.10/nsis-3.10.zip/download"
 NSIS_LOCAL_ZIP = "nsis.zip"
@@ -153,6 +159,53 @@ def install_nsis():
     return None
 
 
+# ==================== GÉNÉRATION UPDATE.JSON ====================
+
+def compute_sha256(filepath: Path) -> str:
+    """Calcule le SHA-256 d'un fichier"""
+    h = hashlib.sha256()
+    with open(filepath, 'rb') as f:
+        for chunk in iter(lambda: f.read(8192), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def generate_update_json(exe_path: Path, release_notes: str = "", mandatory: bool = False) -> Path:
+    """
+    Génère le fichier update.json pour l'auto-updater.
+    Doit être uploadé sur le serveur avec le .exe
+    """
+    print(f"\n   📝 Génération de update.json...")
+    
+    if not exe_path.exists():
+        print(f"   ❌ Exécutable non trouvé : {exe_path}")
+        return None
+    
+    checksum = compute_sha256(exe_path)
+    size = exe_path.stat().st_size
+    
+    update_data = {
+        "version": APP_VERSION,
+        "url": f"{UPDATE_BASE_URL}/{exe_path.name}",
+        "checksum": checksum,
+        "size_bytes": size,
+        "release_notes": release_notes,
+        "min_version": "1.0.0",
+        "mandatory": mandatory,
+        "published_at": datetime.now().isoformat()
+    }
+    
+    output = Path("update.json")
+    output.write_text(json.dumps(update_data, indent=2), encoding='utf-8')
+    
+    print(f"   ✅ {output.name} généré")
+    print(f"   📦 Version : {APP_VERSION}")
+    print(f"   🔐 SHA-256 : {checksum[:16]}...")
+    print(f"   📊 Taille : {size / 1024 / 1024:.1f} Mo")
+    
+    return output
+
+
 # ==================== ÉTAPES DE BUILD ====================
 
 def clean_build():
@@ -190,6 +243,9 @@ def build_executable():
         "--hidden-import", "PySide6.QtGui",
         "--hidden-import", "PySide6.QtWidgets",
         "--hidden-import", "sqlite3",
+        "--hidden-import", "database.migrations.runner",
+        "--hidden-import", "core.auth_service",
+        "--hidden-import", "core.auth_manager",
     ])
     
     cmd.append(MAIN_SCRIPT)
@@ -215,14 +271,24 @@ def create_installer_script(has_icon):
     
     shutil.copy2(exe_source, exe_dest)
     
-    # Générer le script NSIS dynamiquement selon la présence de l'icône
-    icon_lines = ""
+    icon_define = ""
+    icon_shortcuts = ""
+    
     if has_icon:
-        icon_lines = '''
+        icon_define = '''
 !define MUI_ICON "icon.ico"
 !define MUI_UNICON "icon.ico"
 '''
+        icon_shortcuts = f'''
+    CreateShortcut "$SMPROGRAMS\\${{APP_NAME}}\\${{APP_NAME}}.lnk" "$INSTDIR\\${{APP_EXE}}" "" "$INSTDIR\\icon.ico" 0
+    CreateShortcut "$DESKTOP\\${{APP_NAME}}.lnk" "$INSTDIR\\${{APP_EXE}}" "" "$INSTDIR\\icon.ico" 0
+'''
         shutil.copy2(ICON_PATH, installer_dir / "icon.ico")
+    else:
+        icon_shortcuts = f'''
+    CreateShortcut "$SMPROGRAMS\\${{APP_NAME}}\\${{APP_NAME}}.lnk" "$INSTDIR\\${{APP_EXE}}"
+    CreateShortcut "$DESKTOP\\${{APP_NAME}}.lnk" "$INSTDIR\\${{APP_EXE}}"
+'''
     
     nsi = installer_dir / "installer.nsi"
     nsi.write_text(f'''; Family Manager Installer
@@ -239,7 +305,7 @@ Name "${{APP_NAME}} ${{APP_VERSION}}"
 OutFile "../{APP_NAME}_Setup_{APP_VERSION}.exe"
 InstallDir "$PROGRAMFILES64\\${{APP_NAME}}"
 RequestExecutionLevel admin
-{icon_lines}
+{icon_define}
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "license.txt"
 !insertmacro MUI_PAGE_DIRECTORY
@@ -256,18 +322,21 @@ RequestExecutionLevel admin
 Section "Install"
     SetOutPath "$INSTDIR"
     File "${{APP_EXE}}"
+    
+    File "icon.ico"
+    
     CreateDirectory "$INSTDIR\\photos"
     CreateDirectory "$INSTDIR\\database"
     
     CreateDirectory "$SMPROGRAMS\\${{APP_NAME}}"
-    CreateShortcut "$SMPROGRAMS\\${{APP_NAME}}\\${{APP_NAME}}.lnk" "$INSTDIR\\${{APP_EXE}}"
+{icon_shortcuts}
     CreateShortcut "$SMPROGRAMS\\${{APP_NAME}}\\Désinstaller.lnk" "$INSTDIR\\uninstall.exe"
-    CreateShortcut "$DESKTOP\\${{APP_NAME}}.lnk" "$INSTDIR\\${{APP_EXE}}"
     
     WriteRegStr HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${{APP_NAME}}" "DisplayName" "${{APP_NAME}}"
     WriteRegStr HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${{APP_NAME}}" "UninstallString" "$INSTDIR\\uninstall.exe"
     WriteRegStr HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${{APP_NAME}}" "DisplayVersion" "${{APP_VERSION}}"
     WriteRegStr HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${{APP_NAME}}" "Publisher" "${{APP_PUBLISHER}}"
+    WriteRegStr HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${{APP_NAME}}" "DisplayIcon" "$INSTDIR\\icon.ico"
     
     WriteUninstaller "$INSTDIR\\uninstall.exe"
 SectionEnd
@@ -280,6 +349,7 @@ Section "Uninstall"
     
     Delete "$INSTDIR\\${{APP_EXE}}"
     Delete "$INSTDIR\\uninstall.exe"
+    Delete "$INSTDIR\\icon.ico"
     
     MessageBox MB_YESNO "Supprimer les données (photos et base de données) ?" /SD IDNO IDYES delete_data IDNO skip_delete
     
@@ -349,6 +419,7 @@ def show_summary():
     
     portable = Path("dist") / f"{APP_NAME}.exe"
     installer = Path(f"{APP_NAME}_Setup_{APP_VERSION}.exe")
+    update_json = Path("update.json")
     
     print("\n📁 Fichiers générés :\n")
     
@@ -356,23 +427,24 @@ def show_summary():
         size = portable.stat().st_size / (1024 * 1024)
         print(f"   📌 PORTABLE")
         print(f"      {portable}")
-        print(f"      {size:.1f} Mo — copiez n'importe où, double-clic = ça marche")
+        print(f"      {size:.1f} Mo")
     
     if installer.exists():
         size = installer.stat().st_size / (1024 * 1024)
         print(f"\n   📌 INSTALLATEUR (recommandé)")
         print(f"      {installer}")
-        print(f"      {size:.1f} Mo — wizard, raccourcis, désinstallation propre")
+        print(f"      {size:.1f} Mo")
+    
+    if update_json.exists():
+        print(f"\n   📌 MISE À JOUR")
+        print(f"      {update_json}")
+        print(f"      À uploader sur : {UPDATE_BASE_URL}/")
     
     print(f"\n🚀 Pour distribuer :")
     if installer.exists():
-        print(f" '{installer.name}' est prêt")
+        print(f"   → Uploadez '{installer.name}' et 'update.json' sur {UPDATE_BASE_URL}/")
     else:
         print(f"   → Zippez le dossier 'dist/' et distribuez")
-    
-    if not installer.exists():
-        print(f"\n⚠️  Installateur non généré (NSIS manquant)")
-        print(f"   L'exécutable portable fonctionne parfaitement !")
 
 
 # ==================== MAIN ====================
@@ -399,7 +471,20 @@ def main():
     print_step(4, 5, "Création de l'installateur")
     build_installer(has_icon)
     
-    print_step(5, 5, "Résumé")
+    print_step(5, 5, "Génération update.json")
+    exe_path = Path("dist") / f"{APP_NAME}.exe"
+    generate_update_json(
+        exe_path=exe_path,
+        release_notes=(
+            "🔐 Nouveau : Système d'authentification\n"
+            "- Login sécurisé avec sessions persistantes\n"
+            "- Gestion des utilisateurs (admin)\n"
+            "- Migration automatique de la base de données"
+        ),
+        mandatory=True  # ← Cette version est obligatoire (schéma incompatible)
+    )
+    
+    print_step(5, 5, "Résumé")  # Réutilise 5 car c'est le dernier
     show_summary()
 
 

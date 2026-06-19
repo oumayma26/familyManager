@@ -1,0 +1,16 @@
+{
+  "1.2.0": [
+    "🔐 Premier setup — Création du compte admin initial, puis connexion sécurisée à chaque démarrage",    "🚪 **Déconnexion automatique** — Fermeture de l'application = suppression du token de session",    "🔐 **Système d'authentification** — Connexion sécurisée avec un seul utilisateur",
+    "🔑 **Sessions persistantes** — Option 'Se souvenir de moi' avec token sécurisé",
+    "🛡️ **Sécurité renforcée**"
+  ],
+  "1.0.0": [
+    "💰 **Pensions automatiques** — Calcul et paiement mensuel par martyr",
+    "📅 **Historique des paiements** — Suivi complet des pensions versées",
+    "📈 **Statistiques avancées** — Répartition par genre, martyrs sans famille, etc.",
+    "🌳 **Arbre généalogique** — Visualisation interactive des familles",
+    "👥 **Gestion des martyrs et membres de famille** — Ajout, modification, suppression avec photos",
+    "🔗 **Relations familiales** — Parents, enfants, conjoints, frères/sœurs",
+    "📷 **Gestion des photos** — Avatar personnalisé pour chaque membre"
+  ]
+}

@@ -6,6 +6,9 @@ from PySide6.QtGui import QFont, QFontDatabase, QIcon
 from core.auth_manager import AuthManager
 from gui.main_window import MainWindow
 from gui.login_dialog import LoginDialog
+from core.feature_tracker import FeatureTracker
+from gui.changelog_dialog import ChangelogDialog, CHANGELOG, get_latest_version
+APP_VERSION = get_latest_version()  # ← Bump à chaque release
 
 def load_fonts():
     """Charge les polices système modernes selon l'OS"""
@@ -442,8 +445,28 @@ def main():
         # Montrer le dialogue de connexion
         login = LoginDialog(is_first_setup=is_first)
         
-        if not login.exec():  # L'utilisateur a fermé sans se connecter
-            sys.exit(0)
+        result = login.exec()
+        
+        if result == LoginDialog.Rejected:  # ← X ou Cancel
+            app.quit()                   # ← Ferme proprement Qt
+            return                       # ← Sort de main()
+
+
+    # ========== CHECK NOUVEAUTÉS ==========
+    if FeatureTracker.should_show_changelog(APP_VERSION):
+        # Collecter toutes les nouveautés depuis la dernière version vue
+        features_to_show = []
+        last_seen = FeatureTracker.get_last_seen_version()
+        
+        for ver, feats in sorted(CHANGELOG.items(), key=lambda x: x[0]):
+            # Version simple : comparer les strings (fonctionne pour X.Y.Z)
+            if ver > last_seen:
+                features_to_show.extend(feats)
+        
+        if features_to_show:
+            dialog = ChangelogDialog(APP_VERSION, features_to_show)
+            dialog.exec()
+            FeatureTracker.mark_version_seen(APP_VERSION)
             
     
     window = MainWindow()

@@ -3,7 +3,8 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-
+from database.migrations.runner import MigrationRunner
+from . import get_db_path
 
 def get_app_data_dir():
     """
@@ -21,14 +22,6 @@ def get_app_data_dir():
     return base_dir
 
 
-def get_db_path():
-    """Retourne le chemin absolu de la base de données."""
-    app_dir = get_app_data_dir()
-    db_dir = app_dir / "database"
-    db_dir.mkdir(parents=True, exist_ok=True)
-    return str(db_dir / "family_tree.db")
-
-
 def get_photos_dir():
     """Retourne le chemin du dossier photos."""
     app_dir = get_app_data_dir()
@@ -42,6 +35,17 @@ class DatabaseManager:
         self.db_path = db_path or get_db_path()
         self.conn = None
         self.create_tables()
+        self._run_migrations()
+
+
+    def _run_migrations(self):
+        """Exécute les migrations automatiquement au démarrage"""
+        try:
+            runner = MigrationRunner(self.db_path)
+            runner.migrate()
+        except Exception as e:
+            print(f"⚠️ Erreur de migration: {e}")
+            raise
     
     def connect(self):
         self.conn = sqlite3.connect(self.db_path)
@@ -130,7 +134,7 @@ class DatabaseManager:
             )
         """)
 
-        
+
         def create_auth_tables(conn):
             """Crée les tables d'authentification"""
             conn.execute("""

@@ -1,6 +1,6 @@
 ; Family Manager Installer
 !define APP_NAME "FamilyManager"
-!define APP_VERSION "1.0.0"
+!define APP_VERSION "1.2.0"
 !define APP_PUBLISHER "FamilyManager Team"
 !define APP_EXE "FamilyManager.exe"
 
@@ -9,7 +9,7 @@ SetCompressor lzma
 !include "LogicLib.nsh"
 
 Name "${APP_NAME} ${APP_VERSION}"
-OutFile "../FamilyManager_Setup_1.0.0.exe"
+OutFile "../FamilyManager_Setup_1.2.0.exe"
 InstallDir "$PROGRAMFILES64\${APP_NAME}"
 RequestExecutionLevel admin
 
@@ -32,18 +32,24 @@ RequestExecutionLevel admin
 Section "Install"
     SetOutPath "$INSTDIR"
     File "${APP_EXE}"
+    
+    File "icon.ico"
+    
     CreateDirectory "$INSTDIR\photos"
     CreateDirectory "$INSTDIR\database"
     
     CreateDirectory "$SMPROGRAMS\${APP_NAME}"
-    CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}"
+
+    CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\icon.ico" 0
+    CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\icon.ico" 0
+
     CreateShortcut "$SMPROGRAMS\${APP_NAME}\Désinstaller.lnk" "$INSTDIR\uninstall.exe"
-    CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}"
     
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayName" "${APP_NAME}"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "UninstallString" "$INSTDIR\uninstall.exe"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayVersion" "${APP_VERSION}"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "Publisher" "${APP_PUBLISHER}"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayIcon" "$INSTDIR\icon.ico"
     
     WriteUninstaller "$INSTDIR\uninstall.exe"
 SectionEnd
@@ -56,6 +62,7 @@ Section "Uninstall"
     
     Delete "$INSTDIR\${APP_EXE}"
     Delete "$INSTDIR\uninstall.exe"
+    Delete "$INSTDIR\icon.ico"
     
     MessageBox MB_YESNO "Supprimer les données (photos et base de données) ?" /SD IDNO IDYES delete_data IDNO skip_delete
     
