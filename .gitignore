@@ -2,20 +2,17 @@
 # PYTHON
 # ============================
 
-# Environnement virtuel
 venv/
 env/
 ENV/
 .venv/
 
-# Cache Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 
-# Distribution / build
 build/
 dist/
 *.egg-info/
@@ -26,31 +23,24 @@ dist/
 # PYINSTALLER
 # ============================
 
-# Fichiers générés par PyInstaller
 *.spec
-!family_manager.spec    # Garde le .spec si tu veux le versionner
+!family_manager.spec
 
 # ============================
 # BASE DE DONNEES
 # ============================
 
-# Base de données locale (ne pas versionner)
 *.db
 *.sqlite
 *.sqlite3
-
-# Dossier des backups (trop lourd)
 backups/
 
 # ============================
 # IDE / EDITORS
 # ============================
 
-# VS Code
 .vscode/
 *.code-workspace
-
-# PyCharm
 .idea/
 *.iml
 
@@ -58,13 +48,10 @@ backups/
 # OS
 # ============================
 
-# Windows
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
-
-# macOS
 .DS_Store
 .AppleDouble
 .LSOverride
@@ -81,7 +68,7 @@ $RECYCLE.BIN/
 *~
 
 # ============================
-# SECRETS (ne jamais versionner !)
+# SECRETS
 # ============================
 
 .env
@@ -89,11 +76,28 @@ $RECYCLE.BIN/
 *.pem
 *.key
 
-nsis_portable/*
-*.exe
-*.zip
-installer/
-*.backup
+# ============================
+# BUILD / INSTALLER (NSIS, PyInstaller)
+# ============================
+
+nsis_portable/
 nsis.zip
-*.db
+installer/
+!installer/.gitkeep
+
+*.backup
+_update.bat
+
+# ⚠️ DANGER : *.exe et *.zip globaux peuvent casser des assets légitimes
+# Si tu as des .exe/.zip dans assets/, ne mets PAS ces lignes :
+# *.exe
+# *.zip
+
+# ============================
+# DONNÉES UTILISATEUR
+# ============================
+
 photos/
+database/
+!database/.gitkeep
+!photos/.gitkeep
