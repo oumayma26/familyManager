@@ -91,3 +91,8 @@ $RECYCLE.BIN/
 
 nsis_portable/*
 *.exe
+*.zip
+installer
+*.backup
+nsis.zip
+*.db
