@@ -1,0 +1,10 @@
+{
+  "version": "1.2.0",
+  "url": "https://ton-site.com/downloads/FamilyManager.exe",
+  "checksum": "6855484ed01aa61eeef3c9f99d58d879cc91baa865c987d6f106af1563b2a6ce",
+  "size_bytes": 49273887,
+  "release_notes": "\ud83d\udd10 Nouveau : Syst\u00e8me d'authentification\n- Login s\u00e9curis\u00e9 avec sessions persistantes\n- Gestion des utilisateurs (admin)\n- Migration automatique de la base de donn\u00e9es",
+  "min_version": "1.0.0",
+  "mandatory": true,
+  "published_at": "2026-06-19T16:32:42.597678"
+}

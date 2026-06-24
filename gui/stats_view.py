@@ -15,190 +15,166 @@ class StatsView(QWidget):
     
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(20)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(24)
         
-        # Titre
-        title = QLabel("📊 Tableau de bord")
-        title_font = QFont()
-        title_font.setPointSize(16)
-        title_font.setBold(True)
-        title.setFont(title_font)
-        title.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title)
+        # Header
+        header = QLabel("📊 Statistiques")
+        header.setObjectName("title")
+        layout.addWidget(header)
         
-        # Grille des statistiques
+        # ===== GRILLE DES STATISTIQUES =====
         grid = QGridLayout()
-        grid.setSpacing(15)
+        grid.setSpacing(16)
         
-        # Carte 1 : Martyrs
-        self.card_martyrs = self.create_stat_card(
-            "☪️ Martyrs", 
-            "0", 
-            "#d32f2f", 
-            "#ffebee"
-        )
+        self.card_martyrs = self.create_stat_card("☪️ Martyrs", "0", "#dc2626")
         grid.addWidget(self.card_martyrs, 0, 0)
         
-        # Carte 2 : Familles
-        self.card_families = self.create_stat_card(
-            "👨‍👩‍👧‍👦 Familles", 
-            "0", 
-            "#1976d2", 
-            "#e3f2fd"
-        )
+        self.card_families = self.create_stat_card("👨‍👩‍👧‍👦 Familles", "0", "#2563eb")
         grid.addWidget(self.card_families, 0, 1)
         
-        # Carte 3 : Total
-        self.card_total = self.create_stat_card(
-            "👥 Total personnes", 
-            "0", 
-            "#388e3c", 
-            "#e8f5e9"
-        )
+        self.card_total = self.create_stat_card("👥 Total personnes", "0", "#16a34a")
         grid.addWidget(self.card_total, 0, 2)
         
-        # Carte 4 : Martyrs sans famille
-        self.card_orphans = self.create_stat_card(
-            "⚠️ Martyrs sans famille", 
-            "0", 
-            "#f57c00", 
-            "#fff3e0"
-        )
+        self.card_orphans = self.create_stat_card("⚠️ Martyrs sans famille", "0", "#ea580c")
         grid.addWidget(self.card_orphans, 1, 0)
         
-        # Carte 5 : Sans CIN
-        self.card_no_cin = self.create_stat_card(
-            "📝 Sans CIN", 
-            "0", 
-            "#7b1fa2", 
-            "#f3e5f5"
-        )
+        self.card_no_cin = self.create_stat_card("📝 Sans CIN", "0", "#7c3aed")
         grid.addWidget(self.card_no_cin, 1, 1)
         
-        # Carte 6 : Répartition genre
         self.card_gender = self.create_gender_card()
         grid.addWidget(self.card_gender, 1, 2)
         
         layout.addLayout(grid)
         
         # Bouton actualiser
-        self.btn_refresh = QPushButton("🔄 Actualiser")
-        self.btn_refresh.setStyleSheet("""
-            QPushButton {
-                background-color: #1976d2;
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #1565c0;
-            }
-        """)
-        self.btn_refresh.clicked.connect(self.load_stats)
-        layout.addWidget(self.btn_refresh, alignment=Qt.AlignCenter)
+        refresh_layout = QHBoxLayout()
+        refresh_layout.addStretch()
         
+        self.btn_refresh = QPushButton("🔄 Actualiser")
+        self.btn_refresh.setObjectName("ghost")
+        self.btn_refresh.setMinimumHeight(40)
+        self.btn_refresh.clicked.connect(self.load_stats)
+        refresh_layout.addWidget(self.btn_refresh)
+        refresh_layout.addStretch()
+        
+        layout.addLayout(refresh_layout)
         layout.addStretch()
     
-    def create_stat_card(self, title, value, color, bg_color):
-        """Crée une carte de statistique"""
+    def create_stat_card(self, title, value, accent_color):
         card = QFrame()
-        card.setStyleSheet(f"""
-            QFrame {{
-                background-color: {bg_color};
-                border-radius: 10px;
-                padding: 15px;
-                border: 1px solid {color};
-            }}
-        """)
+        card.setObjectName("card")
         
         layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(8)
+        
+        indicator = QFrame()
+        indicator.setFixedHeight(3)
+        indicator.setStyleSheet(f"background-color: {accent_color}; border-radius: 2px;")
+        layout.addWidget(indicator)
         
         label_title = QLabel(title)
-        label_title.setStyleSheet(f"color: {color}; font-size: 12px; font-weight: bold;")
+        label_title.setObjectName("statLabel")
         layout.addWidget(label_title)
         
         label_value = QLabel(value)
-        label_value.setStyleSheet(f"color: {color}; font-size: 32px; font-weight: bold;")
-        label_value.setAlignment(Qt.AlignCenter)
+        label_value.setObjectName("statValue")
         layout.addWidget(label_value)
         
-        # Stocker la référence pour mise à jour
         card.value_label = label_value
-        
         return card
     
     def create_gender_card(self):
-        """Crée une carte spéciale pour la répartition genre"""
         card = QFrame()
-        card.setStyleSheet("""
-            QFrame {
-                background-color: #fafafa;
-                border-radius: 10px;
-                padding: 15px;
-                border: 1px solid #666;
-            }
-        """)
+        card.setObjectName("card")
         
         layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        
+        indicator = QFrame()
+        indicator.setFixedHeight(3)
+        indicator.setStyleSheet("background-color: #64748b; border-radius: 2px;")
+        layout.addWidget(indicator)
         
         title = QLabel("⚥ Répartition par genre")
-        title.setStyleSheet("color: #666; font-size: 12px; font-weight: bold;")
+        title.setObjectName("statLabel")
         layout.addWidget(title)
         
-        # Homme
+        male_container = QVBoxLayout()
+        male_container.setSpacing(4)
+        
+        male_header = QHBoxLayout()
+        male_label = QLabel("Hommes")
+        male_label.setStyleSheet("color: #334155; font-weight: 500; font-size: 9pt;")
+        male_header.addWidget(male_label)
+        
+        self.male_percent = QLabel("0%")
+        self.male_percent.setStyleSheet("color: #6366f1; font-weight: 600; font-size: 9pt;")
+        male_header.addWidget(self.male_percent)
+        male_container.addLayout(male_header)
+        
         self.bar_male = QProgressBar()
+        self.bar_male.setTextVisible(False)
+        self.bar_male.setFixedHeight(8)
         self.bar_male.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                text-align: center;
-            }
-            QProgressBar::chunk {
-                background-color: #2196F3;
-            }
+            QProgressBar { background-color: #e0e7ff; border-radius: 4px; }
+            QProgressBar::chunk { background-color: #6366f1; border-radius: 4px; }
         """)
-        self.bar_male.setFormat("Homme: %v%")
-        layout.addWidget(self.bar_male)
+        male_container.addWidget(self.bar_male)
+        layout.addLayout(male_container)
         
-        # Femme
+        female_container = QVBoxLayout()
+        female_container.setSpacing(4)
+        
+        female_header = QHBoxLayout()
+        female_label = QLabel("Femmes")
+        female_label.setStyleSheet("color: #334155; font-weight: 500; font-size: 9pt;")
+        female_header.addWidget(female_label)
+        
+        self.female_percent = QLabel("0%")
+        self.female_percent.setStyleSheet("color: #ec4899; font-weight: 600; font-size: 9pt;")
+        female_header.addWidget(self.female_percent)
+        female_container.addLayout(female_header)
+        
         self.bar_female = QProgressBar()
+        self.bar_female.setTextVisible(False)
+        self.bar_female.setFixedHeight(8)
         self.bar_female.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                text-align: center;
-            }
-            QProgressBar::chunk {
-                background-color: #E91E63;
-            }
+            QProgressBar { background-color: #fce7f3; border-radius: 4px; }
+            QProgressBar::chunk { background-color: #ec4899; border-radius: 4px; }
         """)
-        self.bar_female.setFormat("Femme: %v%")
-        layout.addWidget(self.bar_female)
+        female_container.addWidget(self.bar_female)
+        layout.addLayout(female_container)
+        layout.addStretch()
         
-      
         return card
     
     def load_stats(self):
-        """Charge et affiche les statistiques"""
         stats = self.db.get_stats()
         
-        # Mettre à jour les cartes
         self.card_martyrs.value_label.setText(str(stats['total_martyrs']))
         self.card_families.value_label.setText(str(stats['total_families']))
         self.card_total.value_label.setText(str(stats['total_persons']))
         self.card_orphans.value_label.setText(str(stats['martyrs_without_family']))
         self.card_no_cin.value_label.setText(str(stats['without_cin']))
         
-        # Mettre à jour les barres de genre
         total = stats['total_persons']
         if total > 0:
             gender = stats['gender_distribution']
             male = gender.get('M', 0)
             female = gender.get('F', 0)
             
-            self.bar_male.setValue(int(male / total * 100))
-            self.bar_female.setValue(int(female / total * 100))
+            male_pct = int(male / total * 100)
+            female_pct = int(female / total * 100)
+            
+            self.bar_male.setValue(male_pct)
+            self.bar_female.setValue(female_pct)
+            self.male_percent.setText(f"{male_pct}% ({male})")
+            self.female_percent.setText(f"{female_pct}% ({female})")
         else:
             self.bar_male.setValue(0)
             self.bar_female.setValue(0)
+            self.male_percent.setText("0%")
+            self.female_percent.setText("0%")
